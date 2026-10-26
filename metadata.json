@@ -1,0 +1,6 @@
+{
+  "name": "AutoCheck",
+  "description": "Aplicativo de controle veicular inteligente para monitorar manutenções, trocas de óleo, consumo de combustível e alertas de revisão compartilhados em tempo real.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

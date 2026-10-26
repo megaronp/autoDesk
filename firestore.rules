@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isVehicleOwner(vehicleData) {
+      return isSignedIn() && ('ownerId' in vehicleData) && vehicleData.ownerId == request.auth.uid;
+    }
+
+    function isVehicleMember(vehicleData) {
+      return isSignedIn() && (
+        (('ownerId' in vehicleData) && vehicleData.ownerId == request.auth.uid) ||
+        (
+          request.auth.token.email != null &&
+          ('sharedWithEmails' in vehicleData) &&
+          vehicleData.sharedWithEmails is list &&
+          vehicleData.sharedWithEmails.hasAny([request.auth.token.email])
+        )
+      );
+    }
+
+    function canAccessVehicle(vehicleId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+        isVehicleMember(get(/databases/$(database)/documents/vehicles/$(vehicleId)).data);
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // Vehicles collection
+    match /vehicles/{vehicleId} {
+      allow get: if isSignedIn() && isVehicleMember(resource.data);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && isVehicleMember(resource.data);
+      allow delete: if isSignedIn() && isVehicleOwner(resource.data);
+
+      // Refuelings subcollection
+      match /refuelings/{refuelingId} {
+        allow get, list: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow create: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
+      }
+
+      // Maintenances subcollection
+      match /maintenances/{maintenanceId} {
+        allow get, list: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow create: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
+      }
+    }
+  }
+}

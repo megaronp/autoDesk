@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Represents an automobile monitored in AutoCheck",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the vehicle" },
+        "name": { "type": "string", "maxLength": 60, "description": "Nickname or vehicle name" },
+        "brand": { "type": "string", "maxLength": 50, "description": "Brand / Manufacturer" },
+        "model": { "type": "string", "maxLength": 50, "description": "Car model" },
+        "year": { "type": "integer", "description": "Manufacturing or model year" },
+        "plate": { "type": "string", "maxLength": 15, "description": "License plate number" },
+        "fuelType": { "type": "string", "enum": ["Flex", "Gasolina", "Etanol", "Diesel", "GNV", "Híbrido", "Elétrico"], "description": "Default fuel type" },
+        "currentMileage": { "type": "number", "description": "Latest recorded odometer reading in kilometers" },
+        "initialMileage": { "type": "number", "description": "Mileage when registered into the app" },
+        "ownerId": { "type": "string", "maxLength": 128, "description": "UID of the vehicle creator" },
+        "ownerEmail": { "type": "string", "maxLength": 120, "description": "Email of the owner" },
+        "sharedWithEmails": { "type": "array", "description": "List of partner/spouse emails permitted to view and update this car" },
+        "shareCode": { "type": "string", "maxLength": 12, "description": "Short code to join car sharing" },
+        "color": { "type": "string", "maxLength": 30, "description": "Vehicle color" },
+        "createdAt": { "type": "string", "description": "ISO date string when created" },
+        "updatedAt": { "type": "string", "description": "ISO date string of last update" }
+      },
+      "required": ["name", "brand", "model", "currentMileage", "ownerId"]
+    },
+    "Refueling": {
+      "title": "Refueling",
+      "description": "Log of vehicle fueling including mileage, liters, and cost",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the fuel entry" },
+        "vehicleId": { "type": "string", "maxLength": 128, "description": "Associated vehicle ID" },
+        "date": { "type": "string", "description": "Fueling date ISO string" },
+        "mileage": { "type": "number", "description": "Odometer reading at refueling" },
+        "liters": { "type": "number", "description": "Volume fueled in liters" },
+        "pricePerLiter": { "type": "number", "description": "Price per liter in currency units" },
+        "totalCost": { "type": "number", "description": "Total amount paid" },
+        "fuelType": { "type": "string", "description": "Type of fuel used" },
+        "isFullTank": { "type": "boolean", "description": "Whether the tank was topped off full" },
+        "calculatedKmL": { "type": "number", "description": "Average km/L calculated from previous full tank" },
+        "gasStation": { "type": "string", "maxLength": 80, "description": "Gas station name or brand" },
+        "notes": { "type": "string", "maxLength": 250, "description": "Optional notes" },
+        "createdByUid": { "type": "string", "maxLength": 128, "description": "UID of user who logged refueling" },
+        "createdByName": { "type": "string", "maxLength": 80, "description": "Display name of logger" },
+        "createdAt": { "type": "string", "description": "Record creation timestamp" }
+      },
+      "required": ["vehicleId", "date", "mileage", "liters", "totalCost", "createdByUid"]
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "description": "Scheduled preventive and completed corrective vehicle maintenance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of maintenance task" },
+        "vehicleId": { "type": "string", "maxLength": 128, "description": "Associated vehicle ID" },
+        "title": { "type": "string", "maxLength": 100, "description": "Service name, e.g. Troca de Óleo e Filtro" },
+        "category": { "type": "string", "maxLength": 50, "description": "Category: óleo, freios, pneus, revisão, etc." },
+        "dueType": { "type": "string", "enum": ["km", "date", "both"], "description": "How the maintenance is scheduled" },
+        "dueMileage": { "type": "number", "description": "Odometer target for service" },
+        "dueDate": { "type": "string", "description": "Calendar target date for service (YYYY-MM-DD)" },
+        "status": { "type": "string", "enum": ["pending", "completed"], "description": "Pending schedule or completed record" },
+        "completedAt": { "type": "string", "description": "Date completed (ISO string)" },
+        "completedMileage": { "type": "number", "description": "Odometer when completed" },
+        "completedCost": { "type": "number", "description": "Total cost of service in currency units" },
+        "workDone": { "type": "string", "maxLength": 500, "description": "Description of what was adjusted or replaced" },
+        "workshop": { "type": "string", "maxLength": 100, "description": "Mechanic or shop name" },
+        "notes": { "type": "string", "maxLength": 300, "description": "Extra service notes" },
+        "nextIntervalKm": { "type": "number", "description": "Auto recurrence in KM" },
+        "nextIntervalMonths": { "type": "number", "description": "Auto recurrence in months" },
+        "createdByUid": { "type": "string", "maxLength": 128, "description": "UID of author" },
+        "createdAt": { "type": "string", "description": "Record creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["vehicleId", "title", "status", "createdByUid"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and notification settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "description": "Firebase Auth UID" },
+        "name": { "type": "string", "maxLength": 100, "description": "User display name" },
+        "email": { "type": "string", "maxLength": 120, "description": "User email" },
+        "photoURL": { "type": "string", "maxLength": 500, "description": "Avatar URL" },
+        "notificationsEnabled": { "type": "boolean", "description": "Whether push/daily notifications are enabled" },
+        "lastActiveVehicleId": { "type": "string", "maxLength": 128, "description": "Selected car ID" },
+        "updatedAt": { "type": "string", "description": "Last profile update" }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vehicleId}": {
+      "schema": { "$ref": "Vehicle" },
+      "description": "Vehicle profiles owned by users or shared with family members"
+    },
+    "/vehicles/{vehicleId}/refuelings/{refuelingId}": {
+      "schema": { "$ref": "Refueling" },
+      "description": "Refueling history for a vehicle"
+    },
+    "/vehicles/{vehicleId}/maintenances/{maintenanceId}": {
+      "schema": { "$ref": "Maintenance" },
+      "description": "Scheduled and completed maintenance events for a vehicle"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "User preference and profile document"
+    }
+  }
+}
