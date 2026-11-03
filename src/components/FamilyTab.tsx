@@ -14,7 +14,8 @@ import {
   Sparkles,
   Zap,
   BellRing,
-  Trash2
+  Trash2,
+  LogOut,
 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +33,7 @@ export const FamilyTab: React.FC<FamilyTabProps> = ({ onOpenNewVehicle }) => {
     shareVehicleWithEmail,
     removeShareEmail,
     joinVehicleByShareCode,
+    leaveVehicle,
   } = useVehicles();
 
   const [partnerEmail, setPartnerEmail] = useState('');
@@ -332,6 +334,33 @@ export const FamilyTab: React.FC<FamilyTabProps> = ({ onOpenNewVehicle }) => {
                     Nenhum familiar adicionado ainda. Insira o e-mail acima ou envie o código de acesso.
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Card: Leave Shared Vehicle (for non-owners) */}
+          {!isOwner && (
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Deixar este veículo</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Remova seu acesso ao carro compartilhado <strong>{activeVehicle.name}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = window.confirm(`Deseja realmente sair do veículo ${activeVehicle.name}?`);
+                    if (ok) {
+                      await leaveVehicle(activeVehicle.id);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sair do Carro
+                </button>
               </div>
             </div>
           )}

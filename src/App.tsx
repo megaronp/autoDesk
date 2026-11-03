@@ -1,23 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { VehicleProvider, useVehicles } from './context/VehicleContext';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { MaintenanceAlertBanner } from './components/MaintenanceAlertBanner';
-import { DashboardTab } from './components/DashboardTab';
-import { FuelTab } from './components/FuelTab';
-import { MaintenanceTab } from './components/MaintenanceTab';
-import { HistoryTab } from './components/HistoryTab';
-import { FamilyTab } from './components/FamilyTab';
 import { AutoCheckLogo } from './components/AutoCheckLogo';
-import { RefuelingModal } from './components/RefuelingModal';
-import { MaintenanceModal } from './components/MaintenanceModal';
-import { CompleteMaintenanceModal } from './components/CompleteMaintenanceModal';
-import { ShareVehicleModal } from './components/ShareVehicleModal';
-import { VehicleModal } from './components/VehicleModal';
-import { LoginModal } from './components/LoginModal';
 import { Maintenance, Vehicle } from './types/vehicle';
 import { Loader2 } from 'lucide-react';
+
+// Code-split tabs and modals for lightning-fast initial load
+const DashboardTab = lazy(() => import('./components/DashboardTab').then((m) => ({ default: m.DashboardTab })));
+const FuelTab = lazy(() => import('./components/FuelTab').then((m) => ({ default: m.FuelTab })));
+const MaintenanceTab = lazy(() => import('./components/MaintenanceTab').then((m) => ({ default: m.MaintenanceTab })));
+const HistoryTab = lazy(() => import('./components/HistoryTab').then((m) => ({ default: m.HistoryTab })));
+const FamilyTab = lazy(() => import('./components/FamilyTab').then((m) => ({ default: m.FamilyTab })));
+const LoginModal = lazy(() => import('./components/LoginModal').then((m) => ({ default: m.LoginModal })));
+const RefuelingModal = lazy(() => import('./components/RefuelingModal').then((m) => ({ default: m.RefuelingModal })));
+const MaintenanceModal = lazy(() => import('./components/MaintenanceModal').then((m) => ({ default: m.MaintenanceModal })));
+const CompleteMaintenanceModal = lazy(() =>
+  import('./components/CompleteMaintenanceModal').then((m) => ({ default: m.CompleteMaintenanceModal }))
+);
+const ShareVehicleModal = lazy(() => import('./components/ShareVehicleModal').then((m) => ({ default: m.ShareVehicleModal })));
+const VehicleModal = lazy(() => import('./components/VehicleModal').then((m) => ({ default: m.VehicleModal })));
+
+const TabLoadingFallback: React.FC = () => (
+  <div className="py-24 text-center space-y-3">
+    <Loader2 className="w-6 h-6 animate-spin text-orange-600 mx-auto" />
+    <p className="text-xs text-slate-500 font-medium">Carregando...</p>
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -54,7 +65,11 @@ const AppContent: React.FC = () => {
   }
 
   if (!user) {
-    return <LoginModal />;
+    return (
+      <Suspense fallback={<TabLoadingFallback />}>
+        <LoginModal />
+      </Suspense>
+    );
   }
 
   const handleOpenNewVehicle = () => {
@@ -91,7 +106,7 @@ const AppContent: React.FC = () => {
             <p className="text-xs text-slate-500 font-medium">Sincronizando veículos no Firebase...</p>
           </div>
         ) : (
-          <>
+          <Suspense fallback={<TabLoadingFallback />}>
             {activeTab === 'dashboard' && (
               <DashboardTab
                 onOpenRefueling={() => setIsRefuelingOpen(true)}
@@ -117,7 +132,7 @@ const AppContent: React.FC = () => {
             {activeTab === 'history' && <HistoryTab />}
 
             {activeTab === 'share' && <FamilyTab onOpenNewVehicle={handleOpenNewVehicle} />}
-          </>
+          </Suspense>
         )}
       </main>
 
@@ -127,43 +142,45 @@ const AppContent: React.FC = () => {
         setActiveTab={setActiveTab}
       />
 
-      {/* Global Modals */}
-      {isRefuelingOpen && (
-        <RefuelingModal
-          isOpen={isRefuelingOpen}
-          onClose={() => setIsRefuelingOpen(false)}
-        />
-      )}
+      {/* Global Modals - Lazy Loaded */}
+      <Suspense fallback={null}>
+        {isRefuelingOpen && (
+          <RefuelingModal
+            isOpen={isRefuelingOpen}
+            onClose={() => setIsRefuelingOpen(false)}
+          />
+        )}
 
-      {isMaintenanceOpen && (
-        <MaintenanceModal
-          isOpen={isMaintenanceOpen}
-          onClose={() => setIsMaintenanceOpen(false)}
-        />
-      )}
+        {isMaintenanceOpen && (
+          <MaintenanceModal
+            isOpen={isMaintenanceOpen}
+            onClose={() => setIsMaintenanceOpen(false)}
+          />
+        )}
 
-      {completingMaintenance && (
-        <CompleteMaintenanceModal
-          maintenance={completingMaintenance}
-          isOpen={Boolean(completingMaintenance)}
-          onClose={() => setCompletingMaintenance(null)}
-        />
-      )}
+        {completingMaintenance && (
+          <CompleteMaintenanceModal
+            maintenance={completingMaintenance}
+            isOpen={Boolean(completingMaintenance)}
+            onClose={() => setCompletingMaintenance(null)}
+          />
+        )}
 
-      {isShareOpen && (
-        <ShareVehicleModal
-          isOpen={isShareOpen}
-          onClose={() => setIsShareOpen(false)}
-        />
-      )}
+        {isShareOpen && (
+          <ShareVehicleModal
+            isOpen={isShareOpen}
+            onClose={() => setIsShareOpen(false)}
+          />
+        )}
 
-      {isVehicleModalOpen && (
-        <VehicleModal
-          isOpen={isVehicleModalOpen}
-          onClose={() => setIsVehicleModalOpen(false)}
-          vehicleToEdit={vehicleToEdit}
-        />
-      )}
+        {isVehicleModalOpen && (
+          <VehicleModal
+            isOpen={isVehicleModalOpen}
+            onClose={() => setIsVehicleModalOpen(false)}
+            vehicleToEdit={vehicleToEdit}
+          />
+        )}
+      </Suspense>
     </div>
   );
 };

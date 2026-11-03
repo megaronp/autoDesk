@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Car, Gauge, Trash2 } from 'lucide-react';
+import { X, Car, Gauge, Trash2, LogOut, ShieldAlert } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
+import { useAuth } from '../context/AuthContext';
 import { FuelType, Vehicle } from '../types/vehicle';
 import { formatFriendlyError } from '../lib/firebase';
 
@@ -25,7 +26,10 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
   onClose,
   vehicleToEdit,
 }) => {
-  const { addVehicle, updateVehicle, deleteVehicle, vehicles } = useVehicles();
+  const { user } = useAuth();
+  const { addVehicle, updateVehicle, deleteVehicle, leaveVehicle, vehicles } = useVehicles();
+
+  const isOwner = !vehicleToEdit || vehicleToEdit.ownerId === user?.uid;
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('Honda');
@@ -61,6 +65,7 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOwner) return;
     setError(null);
 
     if (!name.trim()) {
@@ -110,7 +115,7 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!vehicleToEdit) return;
+    if (!vehicleToEdit || !isOwner) return;
     if (vehicles.length <= 1) {
       alert('Você precisa manter pelo menos 1 veículo cadastrado.');
       return;
@@ -119,6 +124,15 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
     const confirmed = window.confirm(`Deseja realmente remover o veículo ${vehicleToEdit.name}?`);
     if (confirmed) {
       await deleteVehicle(vehicleToEdit.id);
+      onClose();
+    }
+  };
+
+  const handleLeaveVehicle = async () => {
+    if (!vehicleToEdit || isOwner) return;
+    const confirmed = window.confirm(`Deseja sair do veículo ${vehicleToEdit.name}? Você deixará de receber atualizações deste carro.`);
+    if (confirmed) {
+      await leaveVehicle(vehicleToEdit.id);
       onClose();
     }
   };
@@ -134,9 +148,17 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {vehicleToEdit ? 'Editar Veículo' : 'Cadastrar Veículo'}
+                {!vehicleToEdit
+                  ? 'Cadastrar Veículo'
+                  : isOwner
+                  ? 'Editar Veículo'
+                  : 'Detalhes do Veículo'}
               </h3>
-              <p className="text-[11px] text-slate-500">Dados do veículo para controle de manutenção</p>
+              <p className="text-[11px] text-slate-500">
+                {isOwner
+                  ? 'Dados do veículo para controle de manutenção'
+                  : 'Veículo compartilhado pelo proprietário'}
+              </p>
             </div>
           </div>
           <button
@@ -149,6 +171,13 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 overflow-y-auto space-y-3.5">
+          {!isOwner && (
+            <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-medium flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+              <span>Você possui acesso compartilhado a este carro. Apenas o proprietário pode alterar os dados principais.</span>
+            </div>
+          )}
+
           {error && (
             <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
               {error}
@@ -163,23 +192,25 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
             <input
               type="text"
               required
+              disabled={!isOwner}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Civic Preto, Renegade, Carro da Família"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
             />
           </div>
 
-          {/* Brand & Model */}
+          {/* Brand & Model in 2 cols */}
           <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Marca
+                Marca *
               </label>
               <select
                 value={brand}
+                disabled={!isOwner}
                 onChange={(e) => setBrand(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
               >
                 {COMMON_BRANDS.map((b) => (
                   <option key={b} value={b}>
@@ -196,78 +227,92 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
               <input
                 type="text"
                 required
+                disabled={!isOwner}
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="Ex: Civic 2.0"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50"
+                placeholder="Ex: Civic EXL, Onix"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
               />
             </div>
           </div>
 
-          {/* Plate & Year */}
+          {/* Year & Plate */}
           <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Placa *
+                Ano de Fabricação *
+              </label>
+              <input
+                type="number"
+                required
+                disabled={!isOwner}
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                min={1970}
+                max={new Date().getFullYear() + 1}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Placa do Carro *
               </label>
               <input
                 type="text"
                 required
+                disabled={!isOwner}
                 value={plate}
                 onChange={(e) => setPlate(e.target.value.toUpperCase())}
-                placeholder="ABC1D23"
+                placeholder="BRA2E19 ou ABC1234"
                 maxLength={8}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 tracking-wider uppercase focus:outline-none focus:border-orange-500 bg-slate-50/50"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Ano de Fabricação / Modelo
-              </label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                min={1970}
-                max={2035}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-semibold text-slate-900 uppercase focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
               />
             </div>
           </div>
 
-          {/* Mileage */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
-              <Gauge className="w-3.5 h-3.5 text-orange-600" />
-              Quilometragem Atual (KM) *
-            </label>
-            <input
-              type="number"
-              required
-              value={currentMileage || ''}
-              onChange={(e) => setCurrentMileage(Number(e.target.value))}
-              placeholder="Ex: 48900"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50"
-            />
-          </div>
-
-          {/* Fuel type */}
+          {/* Current Mileage */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              Combustível Padrão
+              Quilometragem Atual (km) *
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                required
+                disabled={!isOwner}
+                value={currentMileage || ''}
+                onChange={(e) => setCurrentMileage(Number(e.target.value))}
+                placeholder="Ex: 45000"
+                min={0}
+                className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
+              />
+              <Gauge className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {isOwner
+                ? 'Esta quilometragem serve de base para as previsões de revisão.'
+                : 'A quilometragem pode ser atualizada no painel inicial ao abastecer.'}
+            </p>
+          </div>
+
+          {/* Fuel Type */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Tipo de Combustível Principal
             </label>
             <div className="grid grid-cols-4 gap-1.5">
-              {FUEL_OPTIONS.map((ft) => (
+              {FUEL_OPTIONS.slice(0, 4).map((ft) => (
                 <button
                   type="button"
                   key={ft}
+                  disabled={!isOwner}
                   onClick={() => setFuelType(ft)}
-                  className={`py-1.5 px-1 text-center rounded-lg text-xs font-semibold transition-colors ${
+                  className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border transition-colors ${
                     fuelType === ft
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
-                  }`}
+                      ? 'bg-orange-50 border-orange-500 text-orange-700 font-bold'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  } disabled:pointer-events-none disabled:opacity-80`}
                 >
                   {ft}
                 </button>
@@ -277,22 +322,35 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
 
           {/* Actions */}
           <div className="pt-2 space-y-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs disabled:opacity-60"
-            >
-              {submitting ? 'Salvando...' : vehicleToEdit ? 'Atualizar Veículo' : 'Cadastrar Veículo'}
-            </button>
+            {isOwner ? (
+              <>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs disabled:opacity-60"
+                >
+                  {submitting ? 'Salvando...' : vehicleToEdit ? 'Atualizar Veículo' : 'Cadastrar Veículo'}
+                </button>
 
-            {vehicleToEdit && vehicles.length > 1 && (
+                {vehicleToEdit && vehicles.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="w-full py-2 px-3 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Excluir Veículo
+                  </button>
+                )}
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={handleDelete}
-                className="w-full py-2 px-3 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleLeaveVehicle}
+                className="w-full py-2.5 px-4 rounded-xl border border-rose-200 bg-rose-50/50 hover:bg-rose-100/60 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Excluir Veículo
+                <LogOut className="w-3.5 h-3.5" />
+                Sair deste Veículo Compartilhado
               </button>
             )}
           </div>

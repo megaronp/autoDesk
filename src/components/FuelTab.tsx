@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Fuel, Plus, Trash2, Calendar, Gauge, DollarSign, Sparkles } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatDate, calculateWeightedConsumption } from '../utils/calculations';
 
 interface FuelTabProps {
@@ -8,6 +9,7 @@ interface FuelTabProps {
 }
 
 export const FuelTab: React.FC<FuelTabProps> = ({ onOpenNewRefueling }) => {
+  const { user } = useAuth();
   const { activeVehicle, refuelings, deleteRefueling } = useVehicles();
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
@@ -159,13 +161,15 @@ export const FuelTab: React.FC<FuelTabProps> = ({ onOpenNewRefueling }) => {
                     </span>
                   ) : null}
 
-                  <button
-                    onClick={(e) => handleDelete(refuel.id, e)}
-                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {(activeVehicle.ownerId === user?.uid || (refuel.createdByUid && refuel.createdByUid === user?.uid)) && (
+                    <button
+                      onClick={(e) => handleDelete(refuel.id, e)}
+                      className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 

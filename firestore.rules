@@ -36,6 +36,12 @@ service cloud.firestore {
         isVehicleMember(get(/databases/$(database)/documents/vehicles/$(vehicleId)).data);
     }
 
+    function isVehicleOwnerById(vehicleId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+        isVehicleOwner(get(/databases/$(database)/documents/vehicles/$(vehicleId)).data);
+    }
+
     function isValidVehicle(v) {
       return v.name is string && v.name.size() > 0 && v.name.size() <= 60 &&
         v.brand is string && v.brand.size() > 0 && v.brand.size() <= 50 &&
@@ -65,11 +71,10 @@ service cloud.firestore {
 
     // Vehicles collection
     match /vehicles/{vehicleId} {
-      allow get: if isSignedIn() && (
-        isVehicleMember(resource.data) ||
-        ('shareCode' in resource.data && resource.data.shareCode is string && exists(/databases/$(database)/documents/shareCodes/$(resource.data.shareCode)))
-      );
-      // Strictly enforce owner or shared user queries - blanket list is blocked!
+      // Direct get: strictly limited to vehicle members (owner or verified shared user)
+      allow get: if isSignedIn() && isVehicleMember(resource.data);
+
+      // Strictly enforce owner or shared user queries - blanket list is blocked
       allow list: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         (
@@ -84,9 +89,10 @@ service cloud.firestore {
         isValidVehicle(request.resource.data);
 
       // Updates strictly partitioned:
-      // 1. Owner can update fields, but ownerId is strictly immutable
+      // 1. Owner can update vehicle fields, but ownerId is strictly immutable
       // 2. Shared user can ONLY update currentMileage and updatedAt
-      // 3. Joiner can ONLY append their own verified email to sharedWithEmails
+      // 3. Joiner can ONLY append own verified email IF they wrote a valid proof document to joins/{auth.uid}
+      // 4. Shared user can remove ONLY their own email to voluntarily leave the vehicle
       allow update: if isSignedIn() && (
         // Case 1: Vehicle Owner updating details (ownerId immutable)
         (
@@ -108,7 +114,7 @@ service cloud.firestore {
           request.resource.data.currentMileage is number &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentMileage', 'updatedAt'])
         ) ||
-        // Case 3: Joining via valid share code (append own email only)
+        // Case 3: Joining via verified proof document (proof that user knew active shareCode)
         (
           request.auth.token.email != null &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWithEmails', 'updatedAt']) &&
@@ -120,14 +126,44 @@ service cloud.firestore {
           request.resource.data.sharedWithEmails.hasAll(resource.data.sharedWithEmails) &&
           request.auth.token.email in request.resource.data.sharedWithEmails &&
           request.resource.data.sharedWithEmails.size() == resource.data.sharedWithEmails.size() + 1 &&
-          ('shareCode' in resource.data) &&
-          resource.data.shareCode is string &&
-          exists(/databases/$(database)/documents/shareCodes/$(resource.data.shareCode))
+          exists(/databases/$(database)/documents/vehicles/$(vehicleId)/joins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)/joins/$(request.auth.uid)).data.code == resource.data.shareCode
+        ) ||
+        // Case 4: Leaving vehicle (shared user removing ONLY their own email)
+        (
+          request.auth.token.email != null &&
+          request.auth.token.email in resource.data.sharedWithEmails &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWithEmails', 'updatedAt']) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.shareCode == resource.data.shareCode &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.plate == resource.data.plate &&
+          request.resource.data.currentMileage == resource.data.currentMileage &&
+          !(request.auth.token.email in request.resource.data.sharedWithEmails) &&
+          request.resource.data.sharedWithEmails.size() == resource.data.sharedWithEmails.size() - 1
         )
       );
 
       // Only the vehicle owner can delete the vehicle
       allow delete: if isSignedIn() && isVehicleOwner(resource.data);
+
+      // Joins proof subcollection for cryptographic/proof-based share code redemption
+      match /joins/{joinUid} {
+        allow get: if isSignedIn() && (
+          request.auth.uid == joinUid ||
+          isVehicleOwnerById(vehicleId)
+        );
+        allow list: if isSignedIn() && isVehicleOwnerById(vehicleId);
+        allow create: if isSignedIn() &&
+          request.auth.uid == joinUid &&
+          request.resource.data.code is string &&
+          request.resource.data.code.size() >= 4 &&
+          request.resource.data.code.size() <= 20 &&
+          exists(/databases/$(database)/documents/shareCodes/$(request.resource.data.code)) &&
+          get(/databases/$(database)/documents/shareCodes/$(request.resource.data.code)).data.vehicleId == vehicleId;
+        allow delete: if isSignedIn() && isVehicleOwnerById(vehicleId);
+        allow update: if false;
+      }
 
       // Refuelings subcollection
       match /refuelings/{refuelingId} {
@@ -135,7 +171,20 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
           canAccessVehicle(vehicleId) &&
           request.resource.data.createdByUid == request.auth.uid;
-        allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
+        // Only author or vehicle owner can modify or delete historical records
+        allow update: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          (
+            isVehicleOwnerById(vehicleId) ||
+            (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
+          ) &&
+          (!('createdByUid' in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid);
+        allow delete: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          (
+            isVehicleOwnerById(vehicleId) ||
+            (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
+          );
       }
 
       // Maintenances subcollection
@@ -144,7 +193,20 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
           canAccessVehicle(vehicleId) &&
           request.resource.data.createdByUid == request.auth.uid;
-        allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
+        // Only author or vehicle owner can modify or delete historical records
+        allow update: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          (
+            isVehicleOwnerById(vehicleId) ||
+            (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
+          ) &&
+          (!('createdByUid' in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid);
+        allow delete: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          (
+            isVehicleOwnerById(vehicleId) ||
+            (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
+          );
       }
     }
   }

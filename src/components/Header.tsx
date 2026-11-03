@@ -153,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
                       }}
                       className="w-full py-2 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs flex items-center justify-center gap-1 transition-colors"
                     >
-                      Editar Atual
+                      {activeVehicle.ownerId === user?.uid ? 'Editar Atual' : 'Ver Detalhes'}
                     </button>
                   </div>
                 </div>

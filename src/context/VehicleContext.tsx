@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
 import {
   collection,
   doc,
   writeBatch,
   getDoc,
+  setDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -45,6 +46,7 @@ interface VehicleContextType {
   }) => Promise<string>;
   updateVehicle: (id: string, updates: Partial<Vehicle>) => Promise<void>;
   deleteVehicle: (id: string) => Promise<void>;
+  leaveVehicle: (vehicleId: string) => Promise<void>;
   shareVehicleWithEmail: (vehicleId: string, email: string) => Promise<void>;
   removeShareEmail: (vehicleId: string, email: string) => Promise<void>;
   joinVehicleByShareCode: (code: string) => Promise<{ success: boolean; message: string }>;
@@ -89,63 +91,58 @@ interface VehicleContextType {
 
 const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_ACTIVE_VEHICLE = 'autocheck_active_vehicle_id';
-const LOCAL_STORAGE_DISMISSED_ALERTS = 'autocheck_dismissed_alerts_date';
+const LOCAL_STORAGE_ACTIVE_KEY = 'autocheck_active_vehicle_id';
+const LOCAL_STORAGE_DISMISSED_ALERTS = 'autocheck_dismissed_alerts_daily';
 
 export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile } = useAuth();
+
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [activeVehicleId, setActiveVehicleIdState] = useState<string | null>(() => {
-    return localStorage.getItem(LOCAL_STORAGE_ACTIVE_VEHICLE) || null;
+    return localStorage.getItem(LOCAL_STORAGE_ACTIVE_KEY) || null;
   });
   const [rawRefuelings, setRawRefuelings] = useState<Refueling[]>([]);
   const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dismissedAlerts, setDismissedAlerts] = useState<{ [id: string]: string }>({});
 
-  // Active vehicle reference
+  // Store active vehicle ID in ref to prevent tearing down listeners upon vehicle change
+  const activeVehicleIdRef = useRef<string | null>(activeVehicleId);
+  useEffect(() => {
+    activeVehicleIdRef.current = activeVehicleId;
+  }, [activeVehicleId]);
+
+  // Persist dismissed alerts per day: { [maintenanceId]: 'YYYY-MM-DD' }
+  const [dismissedAlerts, setDismissedAlerts] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_DISMISSED_ALERTS);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const setActiveVehicleId = (id: string) => {
+    setActiveVehicleIdState(id);
+    localStorage.setItem(LOCAL_STORAGE_ACTIVE_KEY, id);
+  };
+
   const activeVehicle = useMemo(() => {
-    if (!vehicles.length) return null;
-    return vehicles.find((v) => v.id === activeVehicleId) || vehicles[0];
+    if (!activeVehicleId) return vehicles[0] || null;
+    return vehicles.find((v) => v.id === activeVehicleId) || vehicles[0] || null;
   }, [vehicles, activeVehicleId]);
 
-  const setActiveVehicleId = useCallback((id: string) => {
-    setActiveVehicleIdState(id);
-    localStorage.setItem(LOCAL_STORAGE_ACTIVE_VEHICLE, id);
-  }, []);
-
-  // Compute calculated metrics on refuelings (sorted by mileage)
+  // Recalculate refueling metrics
   const refuelings = useMemo(() => {
     return calculateRefuelingMetrics(rawRefuelings);
   }, [rawRefuelings]);
 
-  // Compute active alerts for current vehicle
+  // Evaluate maintenance alerts
   const alerts = useMemo(() => {
     if (!activeVehicle) return [];
     return evaluateMaintenanceAlerts(activeVehicle, maintenances);
   }, [activeVehicle, maintenances]);
 
-  // Load dismissed alerts for today
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_STORAGE_DISMISSED_ALERTS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const todayStr = getLocalDateString();
-        const validToday: Record<string, string> = {};
-        for (const [id, dateVal] of Object.entries(parsed)) {
-          if (dateVal === todayStr) {
-            validToday[id] = todayStr;
-          }
-        }
-        setDismissedAlerts(validToday);
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
-
-  // Check and dispatch notifications when alerts are detected
+  // Send browser notifications
   useEffect(() => {
     if (!activeVehicle || alerts.length === 0) return;
 
@@ -178,6 +175,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Sync Real Vehicles from Firestore securely (strictly scoped to owner or shared email)
+  // Decoupled from activeVehicleId so switching cars NEVER re-queries Firestore!
   useEffect(() => {
     if (!user) {
       setVehicles([]);
@@ -207,8 +205,11 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setVehicles(fetchedVehicles);
 
       if (fetchedVehicles.length > 0) {
-        if (!activeVehicleId || !fetchedVehicles.some((v) => v.id === activeVehicleId)) {
-          setActiveVehicleId(fetchedVehicles[0].id);
+        const currentActive = activeVehicleIdRef.current;
+        if (!currentActive || !fetchedVehicles.some((v) => v.id === currentActive)) {
+          const firstId = fetchedVehicles[0].id;
+          setActiveVehicleIdState(firstId);
+          localStorage.setItem(LOCAL_STORAGE_ACTIVE_KEY, firstId);
         }
       } else {
         setActiveVehicleIdState(null);
@@ -223,7 +224,37 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
       (snapshot) => {
         ownedMap.clear();
         snapshot.forEach((docSnap) => {
-          ownedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as Omit<Vehicle, 'id'>) });
+          const data = docSnap.data();
+          ownedMap.set(docSnap.id, { id: docSnap.id, ...(data as Omit<Vehicle, 'id'>) });
+
+          // Self-heal legacy vehicles that might lack a shareCodes/{code} document
+          if (data.ownerId === user.uid) {
+            if (data.shareCode) {
+              getDoc(doc(db, 'shareCodes', data.shareCode)).then((codeSnap) => {
+                if (!codeSnap.exists()) {
+                  setDoc(doc(db, 'shareCodes', data.shareCode), {
+                    code: data.shareCode,
+                    vehicleId: docSnap.id,
+                    vehicleName: data.name || 'Veículo',
+                    ownerId: user.uid,
+                    createdAt: new Date().toISOString(),
+                  }).catch(() => {});
+                }
+              }).catch(() => {});
+            } else {
+              const newCode = generateShareCode();
+              const b = writeBatch(db);
+              b.update(docSnap.ref, { shareCode: newCode, updatedAt: new Date().toISOString() });
+              b.set(doc(db, 'shareCodes', newCode), {
+                code: newCode,
+                vehicleId: docSnap.id,
+                vehicleName: data.name || 'Veículo',
+                ownerId: user.uid,
+                createdAt: new Date().toISOString(),
+              });
+              b.commit().catch(() => {});
+            }
+          }
         });
         updateCombined();
       },
@@ -257,7 +288,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubOwned();
       if (unsubShared) unsubShared();
     };
-  }, [user, activeVehicleId, setActiveVehicleId]);
+  }, [user?.uid, user?.email]);
 
   // Sync refuelings and maintenances for active vehicle
   useEffect(() => {
@@ -301,7 +332,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubRefueling();
       unsubMaint();
     };
-  }, [activeVehicle, user]);
+  }, [activeVehicle?.id, user?.uid]);
 
   // Add new Vehicle with atomic ShareCode indexing
   const addVehicle = async (data: {
@@ -335,6 +366,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const shareCodeData = sanitizeFirestoreData({
       code: shareCode,
       vehicleId: vehicleDocRef.id,
+      vehicleName: data.name.trim(),
       ownerId: user.uid,
       createdAt: new Date().toISOString(),
     });
@@ -364,31 +396,41 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Cascading deletion: vehicle document + subcollections + shareCode
+  // Cascading deletion with safe batch slicing (under 500 limit)
   const deleteVehicle = async (id: string) => {
     const targetVehicle = vehicles.find((v) => v.id === id);
     if (!targetVehicle) return;
 
     try {
-      const batch = writeBatch(db);
+      // 1. Fetch all refuelings, maintenances, and joins in parallel
+      const [refuelsSnap, maintsSnap, joinsSnap] = await Promise.all([
+        getDocs(collection(db, 'vehicles', id, 'refuelings')),
+        getDocs(collection(db, 'vehicles', id, 'maintenances')),
+        getDocs(collection(db, 'vehicles', id, 'joins')),
+      ]);
 
-      // 1. Delete all refuelings in subcollection
-      const refuelsSnap = await getDocs(collection(db, 'vehicles', id, 'refuelings'));
-      refuelsSnap.forEach((d) => batch.delete(d.ref));
+      const allRefsToDelete = [
+        ...refuelsSnap.docs.map((d) => d.ref),
+        ...maintsSnap.docs.map((d) => d.ref),
+        ...joinsSnap.docs.map((d) => d.ref),
+      ];
 
-      // 2. Delete all maintenances in subcollection
-      const maintsSnap = await getDocs(collection(db, 'vehicles', id, 'maintenances'));
-      maintsSnap.forEach((d) => batch.delete(d.ref));
-
-      // 3. Delete shareCode document if exists
-      if (targetVehicle.shareCode) {
-        batch.delete(doc(db, 'shareCodes', targetVehicle.shareCode));
+      // Delete subcollection documents in chunks of 400 operations
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < allRefsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = allRefsToDelete.slice(i, i + CHUNK_SIZE);
+        const chunkBatch = writeBatch(db);
+        chunk.forEach((ref) => chunkBatch.delete(ref));
+        await chunkBatch.commit();
       }
 
-      // 4. Delete the vehicle document itself
-      batch.delete(doc(db, 'vehicles', id));
-
-      await batch.commit();
+      // Final batch: shareCode document + vehicle document
+      const finalBatch = writeBatch(db);
+      if (targetVehicle.shareCode) {
+        finalBatch.delete(doc(db, 'shareCodes', targetVehicle.shareCode));
+      }
+      finalBatch.delete(doc(db, 'vehicles', id));
+      await finalBatch.commit();
 
       const remaining = vehicles.filter((v) => v.id !== id);
       if (remaining.length > 0) {
@@ -401,13 +443,41 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Share with email (e.g. spouse)
+  // Voluntary leaving a shared vehicle (removing only own email)
+  const leaveVehicle = async (vehicleId: string) => {
+    if (!user || !user.email) return;
+    const userEmail = user.email.trim();
+    const target = vehicles.find((v) => v.id === vehicleId);
+    if (!target) return;
+
+    try {
+      const updatedShared = (target.sharedWithEmails || []).filter(
+        (e) => e.toLowerCase() !== userEmail.toLowerCase()
+      );
+
+      await updateDoc(doc(db, 'vehicles', vehicleId), {
+        sharedWithEmails: updatedShared,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const remaining = vehicles.filter((v) => v.id !== vehicleId);
+      if (remaining.length > 0) {
+        setActiveVehicleId(remaining[0].id);
+      } else {
+        setActiveVehicleIdState(null);
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `vehicles/${vehicleId}`);
+    }
+  };
+
+  // Share with email (owner only)
   const shareVehicleWithEmail = async (vehicleId: string, email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const vehicle = vehicles.find((v) => v.id === vehicleId);
     if (!vehicle) throw new Error('Veículo não encontrado');
 
-    if (vehicle.sharedWithEmails?.includes(cleanEmail)) {
+    if (vehicle.sharedWithEmails?.map((e) => e.toLowerCase()).includes(cleanEmail)) {
       return;
     }
 
@@ -424,12 +494,12 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await updateVehicle(vehicleId, { sharedWithEmails: updatedShared });
   };
 
-  // Join car via 6-digit share code
+  // Join car via 6-digit share code using cryptographic proof-of-code pattern
   const joinVehicleByShareCode = async (code: string): Promise<{ success: boolean; message: string }> => {
     if (!user) return { success: false, message: 'Você precisa estar conectado.' };
     const cleanCode = code.trim().toUpperCase();
 
-    if (!cleanCode || cleanCode.length < 5) {
+    if (!cleanCode || cleanCode.length < 4) {
       return { success: false, message: 'Código de compartilhamento inválido.' };
     }
 
@@ -453,35 +523,36 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: false, message: 'Você já é o proprietário deste veículo.' };
       }
 
-      // 2. Fetch target vehicle
-      const vehicleDocSnap = await getDoc(doc(db, 'vehicles', targetVehicleId));
-      if (!vehicleDocSnap.exists()) {
-        return { success: false, message: 'Veículo vinculado a este código não foi encontrado.' };
-      }
-
-      const carData = vehicleDocSnap.data() as Vehicle;
-      const existingShared = carData.sharedWithEmails || [];
-
-      if (existingShared.map((e) => e.toLowerCase()).includes(userEmail)) {
+      if (vehicles.some((v) => v.id === targetVehicleId)) {
         setActiveVehicleId(targetVehicleId);
-        return { success: true, message: `Você já possui acesso ao veículo ${carData.name}.` };
+        return { success: true, message: 'Você já possui acesso a este veículo.' };
       }
 
-      // 3. Atomically join by appending email using arrayUnion
+      // 2. Write join proof doc in subcollection vehicles/{vehicleId}/joins/{user.uid}
+      // Proves to Firestore security rules that the user possesses a valid share code
+      await setDoc(doc(db, 'vehicles', targetVehicleId, 'joins', user.uid), {
+        code: cleanCode,
+        joinedAt: new Date().toISOString(),
+        userEmail: userEmail,
+        userId: user.uid,
+      });
+
+      // 3. Atomically join by appending email using arrayUnion (allowed by Case 3 rule)
       await updateDoc(doc(db, 'vehicles', targetVehicleId), {
         sharedWithEmails: arrayUnion(userEmail),
         updatedAt: new Date().toISOString(),
       });
 
       setActiveVehicleId(targetVehicleId);
-      return { success: true, message: `Conectado ao veículo ${carData.name} com sucesso!` };
+      const carName = shareData.vehicleName ? `ao veículo ${shareData.vehicleName}` : 'ao veículo';
+      return { success: true, message: `Conectado ${carName} com sucesso!` };
     } catch (err) {
       console.error('Erro ao conectar via código:', err);
-      return { success: false, message: 'Falha de permissão ou rede ao conectar ao veículo. Tente novamente.' };
+      return { success: false, message: 'Falha de permissão ou rede ao conectar ao veículo. Verifique o código e tente novamente.' };
     }
   };
 
-  // Add Refueling with atomic writeBatch
+  // Add Refueling with atomic writeBatch and author recording
   const addRefueling = async (data: {
     date: string;
     mileage: number;
@@ -531,7 +602,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Add scheduled maintenance
+  // Add scheduled maintenance with author recording
   const addMaintenance = async (data: {
     title: string;
     category: string;
@@ -708,6 +779,7 @@ export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addVehicle,
         updateVehicle,
         deleteVehicle,
+        leaveVehicle,
         shareVehicleWithEmail,
         removeShareEmail,
         joinVehicleByShareCode,

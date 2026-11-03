@@ -12,6 +12,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
+import { useAuth } from '../context/AuthContext';
 import { Maintenance } from '../types/vehicle';
 import { formatCurrency, formatDate } from '../utils/calculations';
 
@@ -24,6 +25,7 @@ export const MaintenanceTab: React.FC<MaintenanceTabProps> = ({
   onOpenNewMaintenance,
   onCompleteMaintenance,
 }) => {
+  const { user } = useAuth();
   const { activeVehicle, maintenances, deleteMaintenance, alerts } = useVehicles();
   const [subTab, setSubTab] = useState<'pending' | 'completed'>('pending');
 
@@ -174,13 +176,15 @@ export const MaintenanceTab: React.FC<MaintenanceTabProps> = ({
                       )}
                     </div>
 
-                    <button
-                      onClick={(e) => handleDelete(m.id, e)}
-                      className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {(activeVehicle.ownerId === user?.uid || (m.createdByUid && m.createdByUid === user?.uid)) && (
+                      <button
+                        onClick={(e) => handleDelete(m.id, e)}
+                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Conditions & Criteria */}
@@ -280,13 +284,15 @@ export const MaintenanceTab: React.FC<MaintenanceTabProps> = ({
                       </span>
                     ) : null}
 
-                    <button
-                      onClick={(e) => handleDelete(m.id, e)}
-                      className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {(activeVehicle.ownerId === user?.uid || (m.createdByUid && m.createdByUid === user?.uid)) && (
+                      <button
+                        onClick={(e) => handleDelete(m.id, e)}
+                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
