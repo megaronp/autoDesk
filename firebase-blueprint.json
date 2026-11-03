@@ -88,6 +88,18 @@
         "updatedAt": { "type": "string", "description": "Last profile update" }
       },
       "required": ["uid", "email"]
+    },
+    "ShareCode": {
+      "title": "ShareCode",
+      "description": "Short code lookup to join a shared vehicle",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 12, "description": "Sharing code (e.g. 8K4M9P)" },
+        "vehicleId": { "type": "string", "maxLength": 128, "description": "Vehicle ID" },
+        "ownerId": { "type": "string", "maxLength": 128, "description": "Owner UID" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["code", "vehicleId", "ownerId"]
     }
   },
   "firestore": {
@@ -102,6 +114,10 @@
     "/vehicles/{vehicleId}/maintenances/{maintenanceId}": {
       "schema": { "$ref": "Maintenance" },
       "description": "Scheduled and completed maintenance events for a vehicle"
+    },
+    "/shareCodes/{code}": {
+      "schema": { "$ref": "ShareCode" },
+      "description": "Direct code lookup for joining vehicle sharing"
     },
     "/users/{userId}": {
       "schema": { "$ref": "UserProfile" },

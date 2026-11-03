@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { AutoCheckLogo } from './AutoCheckLogo';
 
 export const LoginModal: React.FC = () => {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useAuth();
@@ -67,30 +68,24 @@ export const LoginModal: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center px-4 py-8 sm:px-6">
-      <div className="w-full max-w-sm space-y-6">
-        {/* Brand & Logo */}
-        <div className="text-center space-y-2.5">
-          <div className="inline-flex items-center justify-center p-3 px-5 rounded-2xl bg-[#07080a] shadow-sm">
-            <img
-              src="/assets/aistudio/file_000000007a38820eb3e55d584a0cb79f_f363a66d.png"
-              alt="AutoCheck"
-              className="h-12 w-auto object-contain"
-            />
-          </div>
-          <p className="text-xs text-slate-500 font-medium">
-            Gestão veicular, manutenção e consumo
-          </p>
+    <div className="min-h-screen bg-[#07080a] flex flex-col justify-center items-center px-4 py-8 sm:px-6 relative overflow-hidden text-slate-100">
+      {/* Subtle ambient orange glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-sm space-y-6 relative z-10 animate-in fade-in duration-200">
+        {/* Brand & Large Logo */}
+        <div className="text-center py-2">
+          <AutoCheckLogo variant="vertical" theme="dark" size="xl" showSubtitle={true} />
         </div>
 
         {/* Auth Card */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-5">
+        <div className="bg-[#0f1118] rounded-2xl border border-slate-800/90 shadow-2xl p-6 sm:p-7 space-y-5">
           {/* Google Sign-in */}
           <button
             type="button"
             onClick={handleGoogleLogin}
             disabled={submitting || loading}
-            className="w-full py-2.5 px-4 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center justify-center gap-2.5 transition-colors shadow-2xs disabled:opacity-60"
+            className="w-full py-2.5 px-4 rounded-xl border border-slate-700 hover:border-slate-600 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-xs flex items-center justify-center gap-2.5 transition-colors shadow-2xs disabled:opacity-60"
           >
             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
               <path
@@ -115,14 +110,14 @@ export const LoginModal: React.FC = () => {
 
           {/* Divider */}
           <div className="relative flex items-center justify-center">
-            <div className="border-t border-slate-200 w-full" />
-            <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium uppercase tracking-wider absolute">
+            <div className="border-t border-slate-800 w-full" />
+            <span className="bg-[#0f1118] px-2.5 text-[11px] text-slate-400 font-medium uppercase tracking-wider absolute">
               ou com e-mail
             </span>
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-100 text-xs font-semibold">
+          <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
@@ -131,8 +126,8 @@ export const LoginModal: React.FC = () => {
               }}
               className={`py-1.5 rounded-lg transition-all ${
                 mode === 'login'
-                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-slate-800 text-white shadow-2xs font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Entrar
@@ -145,8 +140,8 @@ export const LoginModal: React.FC = () => {
               }}
               className={`py-1.5 rounded-lg transition-all ${
                 mode === 'register'
-                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-slate-800 text-white shadow-2xs font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Criar Conta
@@ -156,60 +151,60 @@ export const LoginModal: React.FC = () => {
           {/* Form */}
           <form onSubmit={handleEmailAuth} className="space-y-3.5">
             {authError && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+              <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs font-medium">
                 {authError}
               </div>
             )}
 
             {mode === 'register' && (
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
                   Nome Completo
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Seu nome"
-                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-50/50"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
                 E-mail
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="exemplo@gmail.com"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-50/50"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
                 Senha
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-50/50"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
                 />
               </div>
             </div>
@@ -217,7 +212,7 @@ export const LoginModal: React.FC = () => {
             <button
               type="submit"
               disabled={submitting || loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-60"
+              className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-orange-600/20 disabled:opacity-60"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
@@ -231,7 +226,7 @@ export const LoginModal: React.FC = () => {
           </form>
         </div>
 
-        <p className="text-center text-[11px] text-slate-400">
+        <p className="text-center text-[11px] text-slate-500">
           Dados sincronizados em tempo real via Firebase
         </p>
       </div>

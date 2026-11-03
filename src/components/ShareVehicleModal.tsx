@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Users, Copy, Check, Mail, UserPlus, ShieldCheck, Link2 } from 'lucide-react';
+import { X, Users, Copy, Check, Mail, UserPlus, ShieldCheck, Link2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
 import { useAuth } from '../context/AuthContext';
+import { formatFriendlyError } from '../lib/firebase';
 
 interface ShareVehicleModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
   const [partnerEmail, setPartnerEmail] = useState('');
   const [copied, setCopied] = useState(false);
   const [submittingEmail, setSubmittingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [joinMessage, setJoinMessage] = useState<{ text: string; isError: boolean } | null>(null);
@@ -27,9 +29,10 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
   if (!isOpen || !activeVehicle) return null;
 
   const isOwner = activeVehicle.ownerId === user?.uid;
-  const shareCode = activeVehicle.shareCode || 'AC-SHARE';
+  const shareCode = activeVehicle.shareCode || '';
 
   const handleCopyCode = () => {
+    if (!shareCode) return;
     navigator.clipboard.writeText(shareCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -37,14 +40,27 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
 
   const handleAddEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerEmail.trim()) return;
+    setEmailStatus(null);
+    const clean = partnerEmail.trim().toLowerCase();
+    if (!clean) return;
+
+    if (clean === user?.email?.toLowerCase()) {
+      setEmailStatus({ type: 'error', message: 'Você já é o proprietário deste veículo.' });
+      return;
+    }
+
+    if (activeVehicle.sharedWithEmails?.map((e) => e.toLowerCase()).includes(clean)) {
+      setEmailStatus({ type: 'error', message: 'Este e-mail já possui acesso ao veículo.' });
+      return;
+    }
 
     try {
       setSubmittingEmail(true);
-      await shareVehicleWithEmail(activeVehicle.id, partnerEmail.trim());
+      await shareVehicleWithEmail(activeVehicle.id, clean);
       setPartnerEmail('');
-    } catch (err) {
-      console.error(err);
+      setEmailStatus({ type: 'success', message: `Acesso liberado com sucesso para ${clean}!` });
+    } catch (err: unknown) {
+      setEmailStatus({ type: 'error', message: formatFriendlyError(err) });
     } finally {
       setSubmittingEmail(false);
     }
@@ -62,8 +78,8 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
       if (res.success) {
         setJoinCode('');
       }
-    } catch {
-      setJoinMessage({ text: 'Falha ao conectar via código.', isError: true });
+    } catch (err: unknown) {
+      setJoinMessage({ text: formatFriendlyError(err), isError: true });
     } finally {
       setJoining(false);
     }
@@ -118,20 +134,22 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
               <div>
                 <span className="text-lg font-black font-mono tracking-widest text-slate-900 select-all">
-                  {shareCode}
+                  {shareCode || '---'}
                 </span>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  Informe este código para que outra pessoa conecte a este veículo.
+                  Informe este código de 6 dígitos para conectar ao veículo.
                 </p>
               </div>
 
-              <button
-                onClick={handleCopyCode}
-                className="py-1.5 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copiado' : 'Copiar'}
-              </button>
+              {shareCode && (
+                <button
+                  onClick={handleCopyCode}
+                  className="py-1.5 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copiado' : 'Copiar'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -142,6 +160,23 @@ export const ShareVehicleModal: React.FC<ShareVehicleModalProps> = ({ isOpen, on
                 <Mail className="w-3.5 h-3.5 text-slate-500" />
                 Convidar por E-mail (ex: Esposa / Marido)
               </label>
+
+              {emailStatus && (
+                <div
+                  className={`p-2 rounded-xl text-xs flex items-center gap-2 ${
+                    emailStatus.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {emailStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-600" />
+                  )}
+                  <span>{emailStatus.message}</span>
+                </div>
+              )}
 
               <form onSubmit={handleAddEmail} className="flex gap-2">
                 <input

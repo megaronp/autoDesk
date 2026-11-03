@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Fuel, Plus, Trash2, Calendar, Gauge, DollarSign, Sparkles } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
-import { formatCurrency, formatDate } from '../utils/calculations';
+import { formatCurrency, formatDate, calculateWeightedConsumption } from '../utils/calculations';
 
 interface FuelTabProps {
   onOpenNewRefueling: () => void;
@@ -13,13 +13,11 @@ export const FuelTab: React.FC<FuelTabProps> = ({ onOpenNewRefueling }) => {
 
   if (!activeVehicle) return null;
 
+  const { averageKmL } = calculateWeightedConsumption(refuelings);
+
   const validConsumptions = refuelings
     .map((r) => r.calculatedKmL)
     .filter((v): v is number => typeof v === 'number' && v > 0);
-
-  const averageKmL = validConsumptions.length > 0
-    ? (validConsumptions.reduce((a, b) => a + b, 0) / validConsumptions.length).toFixed(2)
-    : '--';
 
   const bestKmL = validConsumptions.length > 0
     ? Math.max(...validConsumptions).toFixed(2)

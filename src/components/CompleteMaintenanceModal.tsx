@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Wrench, CheckCircle2, DollarSign, Gauge, Store, Repeat } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
 import { Maintenance } from '../types/vehicle';
+import { formatFriendlyError } from '../lib/firebase';
 
 interface CompleteMaintenanceModalProps {
   maintenance: Maintenance | null;
@@ -34,8 +35,10 @@ export const CompleteMaintenanceModal: React.FC<CompleteMaintenanceModalProps> =
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const prevOpenRef = useRef(false);
+
   useEffect(() => {
-    if (activeVehicle && maintenance) {
+    if (isOpen && !prevOpenRef.current && activeVehicle && maintenance) {
       setCompletedMileage(activeVehicle.currentMileage);
       setWorkDone('');
       setCompletedCost('');
@@ -43,8 +46,10 @@ export const CompleteMaintenanceModal: React.FC<CompleteMaintenanceModalProps> =
       setNotes('');
       setScheduleNextKm(maintenance.nextIntervalKm || 10000);
       setScheduleNextMonths(maintenance.nextIntervalMonths || 6);
+      setError(null);
     }
-  }, [activeVehicle, maintenance, isOpen]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, activeVehicle, maintenance]);
 
   if (!isOpen || !maintenance || !activeVehicle) return null;
 
@@ -77,7 +82,7 @@ export const CompleteMaintenanceModal: React.FC<CompleteMaintenanceModalProps> =
       });
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao concluir manutenção.');
+      setError(formatFriendlyError(err));
     } finally {
       setSubmitting(false);
     }

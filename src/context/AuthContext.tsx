@@ -32,9 +32,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     testFirebaseConnection();
 
-    // Clear legacy demo storage if any existed
-    localStorage.removeItem('autocheck_demo_user');
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
@@ -91,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithEmail = async (email: string, pass: string) => {
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, email.trim(), pass);
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass);
     } catch (error) {
       console.error('Erro no login com e-mail:', error);
       throw error;
@@ -103,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUpWithEmail = async (email: string, pass: string, name: string) => {
     try {
       setLoading(true);
-      const res = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      const res = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), pass);
       if (res.user) {
         await updateAuthProfile(res.user, { displayName: name.trim() });
         const userDocRef = doc(db, 'users', res.user.uid);

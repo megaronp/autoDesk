@@ -38,9 +38,23 @@ export function formatDateTime(isoString: string): string {
   }
 }
 
+export function getLocalDateString(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getLocalMonthString(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
 /**
  * Recalculates refuelings with consumption (Km/L) and cost per km.
  * Refuelings should be sorted ascending by mileage/date.
+ * Accurately includes all intermediate partial refuelings in both liters and cost.
  */
 export function calculateRefuelingMetrics(refuelings: Refueling[]): Refueling[] {
   const sorted = [...refuelings].sort((a, b) => {
@@ -50,6 +64,7 @@ export function calculateRefuelingMetrics(refuelings: Refueling[]): Refueling[] 
 
   let previousFullRefueling: Refueling | null = null;
   let intermediateLiters = 0;
+  let intermediateCost = 0;
 
   return sorted.map((current) => {
     let calculatedKmL: number | undefined = undefined;
@@ -59,18 +74,21 @@ export function calculateRefuelingMetrics(refuelings: Refueling[]): Refueling[] 
     if (previousFullRefueling) {
       kmTraveled = current.mileage - previousFullRefueling.mileage;
       const totalLitersConsumed = intermediateLiters + current.liters;
+      const totalCostConsumed = intermediateCost + current.totalCost;
 
       if (current.isFullTank && kmTraveled > 0 && totalLitersConsumed > 0) {
         calculatedKmL = Number((kmTraveled / totalLitersConsumed).toFixed(2));
-        costPerKm = Number((current.totalCost / kmTraveled).toFixed(2));
+        costPerKm = Number((totalCostConsumed / kmTraveled).toFixed(2));
       }
     }
 
     if (current.isFullTank) {
       previousFullRefueling = current;
       intermediateLiters = 0;
+      intermediateCost = 0;
     } else {
       intermediateLiters += current.liters;
+      intermediateCost += current.totalCost;
     }
 
     return {
@@ -80,6 +98,38 @@ export function calculateRefuelingMetrics(refuelings: Refueling[]): Refueling[] 
       costPerKm,
     };
   });
+}
+
+/**
+ * Calculates weighted average consumption and cost per km across all valid full-to-full intervals.
+ * Weighted Km/L = Total km in intervals / Total liters in intervals.
+ */
+export function calculateWeightedConsumption(refuelings: Refueling[]): {
+  averageKmL: string;
+  averageCostPerKm: string;
+  validIntervalCount: number;
+} {
+  const metrics = calculateRefuelingMetrics(refuelings);
+  let totalKm = 0;
+  let totalLiters = 0;
+  let totalCost = 0;
+  let validIntervalCount = 0;
+
+  metrics.forEach((r) => {
+    if (r.calculatedKmL && r.kmTraveled && r.kmTraveled > 0 && r.costPerKm) {
+      const liters = r.kmTraveled / r.calculatedKmL;
+      const cost = r.costPerKm * r.kmTraveled;
+      totalKm += r.kmTraveled;
+      totalLiters += liters;
+      totalCost += cost;
+      validIntervalCount++;
+    }
+  });
+
+  const averageKmL = totalKm > 0 && totalLiters > 0 ? (totalKm / totalLiters).toFixed(2) : '--';
+  const averageCostPerKm = totalKm > 0 && totalCost > 0 ? formatCurrency(totalCost / totalKm) : '--';
+
+  return { averageKmL, averageCostPerKm, validIntervalCount };
 }
 
 /**
@@ -114,7 +164,6 @@ export function evaluateMaintenanceAlerts(vehicle: Vehicle, maintenances: Mainte
         urgency = remainingKm <= 200 ? 'critical' : 'warning';
         reasonKm = `Faltam apenas ${remainingKm} km para a meta (${m.dueMileage.toLocaleString('pt-BR')} km)`;
       } else if (remainingKm <= 1000) {
-        // notice
         remainingKm = remainingKm;
       }
     }
@@ -170,12 +219,12 @@ export function evaluateMaintenanceAlerts(vehicle: Vehicle, maintenances: Mainte
 }
 
 /**
- * Generate a friendly 6-digit sharing code (e.g., AC-7F9K)
+ * Generate an unambiguous 6-character sharing code (e.g., 8K4M9P)
  */
 export function generateShareCode(): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  let result = 'AC-';
-  for (let i = 0; i < 4; i++) {
+  let result = '';
+  for (let i = 0; i < 6; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;

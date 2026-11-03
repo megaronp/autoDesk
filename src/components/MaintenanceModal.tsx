@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Wrench, Calendar, Gauge, Sparkles } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
 import { MaintenanceDueType } from '../types/vehicle';
+import { getLocalDateString } from '../utils/calculations';
+import { formatFriendlyError } from '../lib/firebase';
 
 interface MaintenanceModalProps {
   isOpen: boolean;
@@ -38,25 +40,28 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({ isOpen, onCl
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const applyPreset = React.useCallback((preset: PresetOption) => {
-    if (!activeVehicle) return;
+  const prevOpenRef = useRef(false);
+
+  const applyPreset = (preset: PresetOption, currentKm: number) => {
     setTitle(preset.title);
     setCategory(preset.category);
     setNextIntervalKm(preset.kmAdd);
     setNextIntervalMonths(preset.monthsAdd);
-
-    setDueMileage(activeVehicle.currentMileage + preset.kmAdd);
+    setDueMileage(currentKm + preset.kmAdd);
 
     const targetDate = new Date();
     targetDate.setMonth(targetDate.getMonth() + preset.monthsAdd);
-    setDueDate(targetDate.toISOString().slice(0, 10));
-  }, [activeVehicle]);
+    setDueDate(getLocalDateString(targetDate));
+  };
 
   useEffect(() => {
-    if (isOpen && activeVehicle) {
-      applyPreset(PRESETS[0]);
+    if (isOpen && !prevOpenRef.current && activeVehicle) {
+      applyPreset(PRESETS[0], activeVehicle.currentMileage);
+      setNotes('');
+      setError(null);
     }
-  }, [activeVehicle, isOpen, applyPreset]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, activeVehicle]);
 
   if (!isOpen || !activeVehicle) return null;
 
@@ -115,7 +120,7 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({ isOpen, onCl
       await addMaintenance(payload);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Falha ao agendar manutenção.');
+      setError(formatFriendlyError(err));
     } finally {
       setSubmitting(false);
     }
@@ -162,7 +167,7 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({ isOpen, onCl
                 <button
                   type="button"
                   key={idx}
-                  onClick={() => applyPreset(p)}
+                  onClick={() => applyPreset(p, activeVehicle.currentMileage)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border ${
                     title === p.title
                       ? 'bg-slate-900 text-white border-slate-900 font-semibold'

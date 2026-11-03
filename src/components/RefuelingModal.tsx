@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Fuel, Gauge, DollarSign, Calendar, MapPin, Sparkles } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
+import { getLocalDateString } from '../utils/calculations';
+import { formatFriendlyError } from '../lib/firebase';
 
 interface RefuelingModalProps {
   isOpen: boolean;
@@ -12,7 +14,7 @@ const COMMON_STATIONS = ['Shell', 'Ipiranga', 'Petrobras (BR)', 'Ale'];
 export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose }) => {
   const { activeVehicle, addRefueling, refuelings } = useVehicles();
 
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => getLocalDateString());
   const [mileage, setMileage] = useState<number>(0);
   const [liters, setLiters] = useState<string>('');
   const [pricePerLiter, setPricePerLiter] = useState<string>('');
@@ -24,12 +26,24 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const prevOpenRef = useRef(false);
+
+  // Initialize/reset form ONLY when modal opens, not on every background vehicle update
   useEffect(() => {
-    if (activeVehicle) {
+    if (isOpen && !prevOpenRef.current && activeVehicle) {
+      setDate(getLocalDateString());
       setMileage(activeVehicle.currentMileage);
+      setLiters('');
+      setPricePerLiter('');
+      setTotalCost('');
       setFuelType(activeVehicle.fuelType === 'Flex' ? 'Gasolina' : activeVehicle.fuelType);
+      setIsFullTank(true);
+      setGasStation('');
+      setNotes('');
+      setError(null);
     }
-  }, [activeVehicle, isOpen]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, activeVehicle]);
 
   if (!isOpen || !activeVehicle) return null;
 
@@ -60,11 +74,16 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
     }
   };
 
+  // Accurately compute preview km/L including any intermediate partial refuelings
   const lastFullRefueling = [...refuelings].reverse().find((r) => r.isFullTank);
   const numLiters = parseFloat(liters.replace(',', '.'));
   let previewKmL: number | null = null;
   if (lastFullRefueling && isFullTank && !isNaN(numLiters) && numLiters > 0 && mileage > lastFullRefueling.mileage) {
-    previewKmL = Number(((mileage - lastFullRefueling.mileage) / numLiters).toFixed(2));
+    const intermediateLiters = refuelings
+      .filter((r) => !r.isFullTank && r.mileage > lastFullRefueling.mileage && r.mileage < mileage)
+      .reduce((sum, r) => sum + r.liters, 0);
+    const totalLiters = intermediateLiters + numLiters;
+    previewKmL = Number(((mileage - lastFullRefueling.mileage) / totalLiters).toFixed(2));
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,6 +96,19 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
 
     if (isNaN(mileage) || mileage <= 0) {
       setError('Por favor informe a quilometragem atual do veículo.');
+      return;
+    }
+
+    // Mileage validation: cannot be less than previous records
+    const previousMileages = refuelings.map((r) => r.mileage);
+    if (previousMileages.length > 0) {
+      const highestPrevious = Math.max(...previousMileages);
+      if (mileage < highestPrevious) {
+        setError(`A quilometragem informada (${mileage.toLocaleString('pt-BR')} km) não pode ser menor que o último registro (${highestPrevious.toLocaleString('pt-BR')} km).`);
+        return;
+      }
+    } else if (activeVehicle.initialMileage && mileage < activeVehicle.initialMileage) {
+      setError(`A quilometragem informada (${mileage.toLocaleString('pt-BR')} km) não pode ser menor que a inicial do veículo (${activeVehicle.initialMileage.toLocaleString('pt-BR')} km).`);
       return;
     }
 
@@ -105,7 +137,7 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
       });
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Falha ao registrar abastecimento.');
+      setError(formatFriendlyError(err));
     } finally {
       setSubmitting(false);
     }

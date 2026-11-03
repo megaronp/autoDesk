@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Car, Gauge, Trash2 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
 import { FuelType, Vehicle } from '../types/vehicle';
+import { formatFriendlyError } from '../lib/firebase';
 
 interface VehicleModalProps {
   isOpen: boolean;
@@ -102,7 +103,7 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
       }
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar veículo.');
+      setError(formatFriendlyError(err));
     } finally {
       setSubmitting(false);
     }

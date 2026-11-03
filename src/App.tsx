@@ -8,6 +8,8 @@ import { DashboardTab } from './components/DashboardTab';
 import { FuelTab } from './components/FuelTab';
 import { MaintenanceTab } from './components/MaintenanceTab';
 import { HistoryTab } from './components/HistoryTab';
+import { FamilyTab } from './components/FamilyTab';
+import { AutoCheckLogo } from './components/AutoCheckLogo';
 import { RefuelingModal } from './components/RefuelingModal';
 import { MaintenanceModal } from './components/MaintenanceModal';
 import { CompleteMaintenanceModal } from './components/CompleteMaintenanceModal';
@@ -33,16 +35,20 @@ const AppContent: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="p-3 px-5 rounded-2xl bg-[#07080a] shadow-sm mb-4">
-          <img
-            src="/assets/aistudio/file_000000007a38820eb3e55d584a0cb79f_f363a66d.png"
-            alt="AutoCheck"
-            className="h-10 w-auto object-contain animate-pulse"
-          />
+      <div className="min-h-screen bg-[#07080a] flex flex-col items-center justify-center p-6 text-white relative overflow-hidden select-none">
+        {/* Subtle orange ambient glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center text-center space-y-8 animate-in fade-in duration-300">
+          <AutoCheckLogo variant="vertical" theme="dark" size="splash" showSubtitle={true} />
+
+          <div className="pt-2 flex flex-col items-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+            <p className="text-xs text-slate-400 font-medium tracking-wide">
+              Carregando AutoCheck...
+            </p>
+          </div>
         </div>
-        <Loader2 className="w-5 h-5 animate-spin text-orange-600 mb-2" />
-        <p className="text-xs text-slate-500 font-medium">Carregando AutoCheck...</p>
       </div>
     );
   }
@@ -90,7 +96,7 @@ const AppContent: React.FC = () => {
               <DashboardTab
                 onOpenRefueling={() => setIsRefuelingOpen(true)}
                 onOpenMaintenance={() => setIsMaintenanceOpen(true)}
-                onOpenShare={() => setIsShareOpen(true)}
+                onOpenShare={() => setActiveTab('share')}
                 onCompleteMaintenance={handleStartCompleteMaintenance}
                 onNavigateToTab={(tab) => setActiveTab(tab)}
                 onOpenNewVehicle={handleOpenNewVehicle}
@@ -110,11 +116,7 @@ const AppContent: React.FC = () => {
 
             {activeTab === 'history' && <HistoryTab />}
 
-            {activeTab === 'share' && (
-              <div className="py-2">
-                <ShareVehicleModal isOpen={true} onClose={() => setActiveTab('dashboard')} />
-              </div>
-            )}
+            {activeTab === 'share' && <FamilyTab onOpenNewVehicle={handleOpenNewVehicle} />}
           </>
         )}
       </main>
@@ -122,13 +124,7 @@ const AppContent: React.FC = () => {
       {/* Mobile-first bottom navigation bar */}
       <BottomNav
         activeTab={activeTab}
-        setActiveTab={(tab) => {
-          if (tab === 'share') {
-            setIsShareOpen(true);
-          } else {
-            setActiveTab(tab);
-          }
-        }}
+        setActiveTab={setActiveTab}
       />
 
       {/* Global Modals */}

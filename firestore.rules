@@ -19,22 +19,29 @@ service cloud.firestore {
       return isSignedIn() && ('ownerId' in vehicleData) && vehicleData.ownerId == request.auth.uid;
     }
 
+    function isVehicleSharedUser(vehicleData) {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        ('sharedWithEmails' in vehicleData) &&
+        request.auth.token.email in vehicleData.sharedWithEmails;
+    }
+
     function isVehicleMember(vehicleData) {
-      return isSignedIn() && (
-        (('ownerId' in vehicleData) && vehicleData.ownerId == request.auth.uid) ||
-        (
-          request.auth.token.email != null &&
-          ('sharedWithEmails' in vehicleData) &&
-          vehicleData.sharedWithEmails is list &&
-          vehicleData.sharedWithEmails.hasAny([request.auth.token.email])
-        )
-      );
+      return isVehicleOwner(vehicleData) || isVehicleSharedUser(vehicleData);
     }
 
     function canAccessVehicle(vehicleId) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
         isVehicleMember(get(/databases/$(database)/documents/vehicles/$(vehicleId)).data);
+    }
+
+    function isValidVehicle(v) {
+      return v.name is string && v.name.size() > 0 && v.name.size() <= 60 &&
+        v.brand is string && v.brand.size() > 0 && v.brand.size() <= 50 &&
+        v.model is string && v.model.size() > 0 && v.model.size() <= 50 &&
+        v.currentMileage is number && v.currentMileage >= 0 &&
+        v.ownerId is string && v.ownerId == request.auth.uid;
     }
 
     // User profiles
@@ -44,25 +51,99 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Share code lookup collection (direct get only - listing is strictly forbidden)
+    match /shareCodes/{code} {
+      allow get: if isSignedIn() && isValidId(code);
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        isValidId(code) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.code == code;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow update: if false;
+    }
+
     // Vehicles collection
     match /vehicles/{vehicleId} {
-      allow get: if isSignedIn() && isVehicleMember(resource.data);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn() && isVehicleMember(resource.data);
+      allow get: if isSignedIn() && (
+        isVehicleMember(resource.data) ||
+        ('shareCode' in resource.data && resource.data.shareCode is string && exists(/databases/$(database)/documents/shareCodes/$(resource.data.shareCode)))
+      );
+      // Strictly enforce owner or shared user queries - blanket list is blocked!
+      allow list: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (
+          request.auth.token.email != null &&
+          request.auth.token.email in resource.data.sharedWithEmails
+        )
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(vehicleId) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        isValidVehicle(request.resource.data);
+
+      // Updates strictly partitioned:
+      // 1. Owner can update fields, but ownerId is strictly immutable
+      // 2. Shared user can ONLY update currentMileage and updatedAt
+      // 3. Joiner can ONLY append their own verified email to sharedWithEmails
+      allow update: if isSignedIn() && (
+        // Case 1: Vehicle Owner updating details (ownerId immutable)
+        (
+          isVehicleOwner(resource.data) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'brand', 'model', 'year', 'plate', 'fuelType', 'color',
+            'currentMileage', 'sharedWithEmails', 'shareCode', 'updatedAt'
+          ])
+        ) ||
+        // Case 2: Shared member updating mileage
+        (
+          isVehicleSharedUser(resource.data) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.shareCode == resource.data.shareCode &&
+          request.resource.data.sharedWithEmails == resource.data.sharedWithEmails &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.plate == resource.data.plate &&
+          request.resource.data.currentMileage is number &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentMileage', 'updatedAt'])
+        ) ||
+        // Case 3: Joining via valid share code (append own email only)
+        (
+          request.auth.token.email != null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWithEmails', 'updatedAt']) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.shareCode == resource.data.shareCode &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.plate == resource.data.plate &&
+          request.resource.data.currentMileage == resource.data.currentMileage &&
+          request.resource.data.sharedWithEmails.hasAll(resource.data.sharedWithEmails) &&
+          request.auth.token.email in request.resource.data.sharedWithEmails &&
+          request.resource.data.sharedWithEmails.size() == resource.data.sharedWithEmails.size() + 1 &&
+          ('shareCode' in resource.data) &&
+          resource.data.shareCode is string &&
+          exists(/databases/$(database)/documents/shareCodes/$(resource.data.shareCode))
+        )
+      );
+
+      // Only the vehicle owner can delete the vehicle
       allow delete: if isSignedIn() && isVehicleOwner(resource.data);
 
       // Refuelings subcollection
       match /refuelings/{refuelingId} {
         allow get, list: if isSignedIn() && canAccessVehicle(vehicleId);
-        allow create: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow create: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          request.resource.data.createdByUid == request.auth.uid;
         allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
       }
 
       // Maintenances subcollection
       match /maintenances/{maintenanceId} {
         allow get, list: if isSignedIn() && canAccessVehicle(vehicleId);
-        allow create: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow create: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          request.resource.data.createdByUid == request.auth.uid;
         allow update, delete: if isSignedIn() && canAccessVehicle(vehicleId);
       }
     }

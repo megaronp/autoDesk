@@ -47,6 +47,26 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function formatFriendlyError(error: unknown): string {
+  if (!error) return 'Ocorreu um erro inesperado.';
+  const rawMsg = error instanceof Error ? error.message : String(error);
+  try {
+    const parsed = JSON.parse(rawMsg);
+    if (parsed && typeof parsed === 'object' && parsed.error) {
+      if (parsed.error.includes('Missing or insufficient permissions') || parsed.error.includes('permission-denied')) {
+        return 'Permissão negada para esta operação no banco de dados.';
+      }
+      return parsed.error;
+    }
+  } catch {
+    // not JSON
+  }
+  if (rawMsg.includes('Missing or insufficient permissions') || rawMsg.includes('permission-denied')) {
+    return 'Permissão negada para realizar esta operação.';
+  }
+  return rawMsg;
+}
+
 export async function testFirebaseConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));

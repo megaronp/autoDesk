@@ -17,7 +17,12 @@ import {
   Car,
 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
-import { formatCurrency, formatDate } from '../utils/calculations';
+import {
+  formatCurrency,
+  formatDate,
+  calculateWeightedConsumption,
+  getLocalMonthString,
+} from '../utils/calculations';
 import { Maintenance } from '../types/vehicle';
 
 interface DashboardTabProps {
@@ -25,7 +30,7 @@ interface DashboardTabProps {
   onOpenMaintenance: () => void;
   onOpenShare: () => void;
   onCompleteMaintenance: (m: Maintenance) => void;
-  onNavigateToTab: (tab: 'fuel' | 'maintenance' | 'history') => void;
+  onNavigateToTab: (tab: 'fuel' | 'maintenance' | 'history' | 'share') => void;
   onOpenNewVehicle: () => void;
 }
 
@@ -70,25 +75,11 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     );
   }
 
-  // Calculate stats
-  const validConsumptions = refuelings
-    .map((r) => r.calculatedKmL)
-    .filter((v): v is number => typeof v === 'number' && v > 0);
+  // Calculate weighted stats (Total km / Total liters across full-to-full intervals)
+  const { averageKmL, averageCostPerKm, validIntervalCount } = calculateWeightedConsumption(refuelings);
 
-  const averageKmL = validConsumptions.length > 0
-    ? (validConsumptions.reduce((a, b) => a + b, 0) / validConsumptions.length).toFixed(2)
-    : '--';
-
-  const validCostsPerKm = refuelings
-    .map((r) => r.costPerKm)
-    .filter((v): v is number => typeof v === 'number' && v > 0);
-
-  const averageCostPerKm = validCostsPerKm.length > 0
-    ? formatCurrency(validCostsPerKm.reduce((a, b) => a + b, 0) / validCostsPerKm.length)
-    : '--';
-
-  // Monthly fuel + maintenance spend
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  // Monthly fuel + maintenance spend using local timezone month
+  const currentMonth = getLocalMonthString();
   const fuelSpentThisMonth = refuelings
     .filter((r) => r.date.startsWith(currentMonth))
     .reduce((sum, r) => sum + r.totalCost, 0);
@@ -245,7 +236,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               <span className="text-xs font-semibold text-slate-500">km/L</span>
             </div>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              {validConsumptions.length} abastecimentos
+              {validIntervalCount > 0 ? `${validIntervalCount} intervalo(s) medido(s)` : 'Aguardando 2º tanque cheio'}
             </p>
           </div>
         </div>

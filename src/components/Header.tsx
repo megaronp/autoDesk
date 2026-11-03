@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useVehicles } from '../context/VehicleContext';
 import { requestNotificationPermission } from '../utils/notifications';
+import { AutoCheckLogo } from './AutoCheckLogo';
 
 interface HeaderProps {
   onOpenNewVehicle: () => void;
@@ -41,13 +42,9 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-[#07080a] border-b border-slate-800/80 px-3 sm:px-4 py-2">
       <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
-        {/* Logo with matching dark background and increased height */}
-        <div className="flex items-center flex-shrink-0">
-          <img
-            src="/assets/aistudio/file_000000007a38820eb3e55d584a0cb79f_f363a66d.png"
-            alt="AutoCheck"
-            className="h-9 sm:h-11 w-auto object-contain block"
-          />
+        {/* Brand Logo - Crisp & Scaled */}
+        <div className="flex items-center flex-shrink-0 cursor-pointer select-none">
+          <AutoCheckLogo variant="horizontal" theme="dark" size="md" />
         </div>
 
         {/* Center: Vehicle Switcher (Compact: Name & Plate only) */}
