@@ -133,8 +133,8 @@ export const HistoryTab: React.FC = () => {
       </div>
 
       {/* Filters & Search */}
-      <div className="space-y-2">
-        <div className="relative">
+      <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+        <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-slate-400" />
           <input
             type="text"
@@ -145,10 +145,10 @@ export const HistoryTab: React.FC = () => {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 text-xs font-semibold">
+        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 text-xs font-semibold sm:w-auto">
           <button
             onClick={() => setFilterType('all')}
-            className={`py-1.5 px-1 text-center rounded-lg transition-all ${
+            className={`py-1.5 px-3 text-center rounded-lg transition-all ${
               filterType === 'all'
                 ? 'bg-white text-slate-900 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
@@ -158,7 +158,7 @@ export const HistoryTab: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterType('fuel')}
-            className={`py-1.5 px-1 text-center rounded-lg transition-all ${
+            className={`py-1.5 px-3 text-center rounded-lg transition-all ${
               filterType === 'fuel'
                 ? 'bg-white text-slate-900 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
@@ -168,7 +168,7 @@ export const HistoryTab: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterType('maintenance')}
-            className={`py-1.5 px-1 text-center rounded-lg transition-all ${
+            className={`py-1.5 px-3 text-center rounded-lg transition-all ${
               filterType === 'maintenance'
                 ? 'bg-white text-slate-900 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'

@@ -118,9 +118,9 @@ export const MaintenanceTab: React.FC<MaintenanceTabProps> = ({
 
       {/* Main List */}
       {subTab === 'pending' ? (
-        <div className="space-y-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {pendingList.length === 0 ? (
-            <div className="p-8 text-center bg-white border border-dashed border-slate-200 rounded-2xl space-y-2">
+            <div className="col-span-full p-8 text-center bg-white border border-dashed border-slate-200 rounded-2xl space-y-2">
               <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto opacity-80" />
               <h4 className="text-sm font-bold text-slate-800">Todas as manutenções em dia</h4>
               <p className="text-xs text-slate-500">
@@ -254,9 +254,9 @@ export const MaintenanceTab: React.FC<MaintenanceTabProps> = ({
           )}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {completedList.length === 0 ? (
-            <div className="p-8 text-center bg-white border border-dashed border-slate-200 rounded-2xl space-y-1.5">
+            <div className="col-span-full p-8 text-center bg-white border border-dashed border-slate-200 rounded-2xl space-y-1.5">
               <Wrench className="w-8 h-8 text-slate-400 mx-auto" />
               <h4 className="text-sm font-bold text-slate-800">Nenhum serviço arquivado</h4>
               <p className="text-xs text-slate-500">

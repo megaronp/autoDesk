@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AutoCheckLogo } from './AutoCheckLogo';
 
@@ -9,7 +9,7 @@ export const LoginModal: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<{ message: string; isDomainError?: boolean } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -19,7 +19,28 @@ export const LoginModal: React.FC = () => {
       await signInWithGoogle();
     } catch (err: unknown) {
       console.warn('Erro login Google:', err);
-      setAuthError('Não foi possível autenticar com o Google. Tente novamente ou use e-mail e senha.');
+      const errStr = err instanceof Error ? err.message : String(err);
+      const errCode = typeof err === 'object' && err !== null && 'code' in err ? String((err as any).code) : '';
+
+      if (errStr.includes('auth/unauthorized-domain') || errCode === 'auth/unauthorized-domain') {
+        setAuthError({
+          message:
+            'O domínio personalizado (autocheck.megaronperin.com.br) ainda não está liberado na lista de Domínios Autorizados do Firebase Authentication.',
+          isDomainError: true,
+        });
+      } else if (errStr.includes('auth/popup-blocked') || errCode === 'auth/popup-blocked') {
+        setAuthError({
+          message: 'O navegador bloqueou a janela pop-up de login do Google. Permita pop-ups para este site.',
+        });
+      } else if (errStr.includes('auth/popup-closed-by-user') || errCode === 'auth/popup-closed-by-user') {
+        setAuthError({
+          message: 'A janela de autenticação do Google foi fechada antes da confirmação.',
+        });
+      } else {
+        setAuthError({
+          message: 'Não foi possível autenticar com o Google. Tente novamente ou entre com e-mail e senha.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -30,12 +51,12 @@ export const LoginModal: React.FC = () => {
     setAuthError(null);
 
     if (!email.trim() || !password.trim()) {
-      setAuthError('Preencha seu e-mail e senha.');
+      setAuthError({ message: 'Preencha seu e-mail e senha.' });
       return;
     }
 
     if (password.length < 6) {
-      setAuthError('A senha deve ter pelo menos 6 caracteres.');
+      setAuthError({ message: 'A senha deve ter pelo menos 6 caracteres.' });
       return;
     }
 
@@ -43,7 +64,7 @@ export const LoginModal: React.FC = () => {
       setSubmitting(true);
       if (mode === 'register') {
         if (!name.trim()) {
-          setAuthError('Informe seu nome para o cadastro.');
+          setAuthError({ message: 'Informe seu nome para o cadastro.' });
           setSubmitting(false);
           return;
         }
@@ -54,13 +75,13 @@ export const LoginModal: React.FC = () => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
-        setAuthError('E-mail ou senha incorretos.');
+        setAuthError({ message: 'E-mail ou senha incorretos.' });
       } else if (msg.includes('email-already-in-use')) {
-        setAuthError('Este e-mail já está cadastrado. Alterne para a aba Entrar.');
+        setAuthError({ message: 'Este e-mail já está cadastrado. Alterne para a aba Entrar.' });
       } else if (msg.includes('invalid-email')) {
-        setAuthError('Formato de e-mail inválido.');
+        setAuthError({ message: 'Formato de e-mail inválido.' });
       } else {
-        setAuthError('Ocorreu um erro ao processar. Verifique os dados e tente novamente.');
+        setAuthError({ message: 'Ocorreu um erro ao processar. Verifique os dados e tente novamente.' });
       }
     } finally {
       setSubmitting(false);
@@ -80,6 +101,27 @@ export const LoginModal: React.FC = () => {
 
         {/* Auth Card */}
         <div className="bg-[#0f1118] rounded-2xl border border-slate-800/90 shadow-2xl p-6 sm:p-7 space-y-5">
+          {/* Prominent Error Notice */}
+          {authError && (
+            <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-200 text-xs font-medium space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <span>{authError.message}</span>
+              </div>
+
+              {authError.isDomainError && (
+                <div className="pt-2 border-t border-rose-900/60 text-[11px] text-rose-300 space-y-1.5">
+                  <p>
+                    <strong>Como liberar:</strong> No Firebase Console, acesse <em>Authentication &gt; Settings &gt; Authorized domains</em> e adicione <code className="bg-rose-900/60 px-1 py-0.5 rounded text-white font-mono">autocheck.megaronperin.com.br</code>.
+                  </p>
+                  <p className="text-rose-400">
+                    💡 Dica: Você também pode criar sua conta e entrar usando <strong>E-mail e Senha</strong> logo abaixo!
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Google Sign-in */}
           <button
             type="button"
@@ -150,85 +192,83 @@ export const LoginModal: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleEmailAuth} className="space-y-3.5">
-            {authError && (
-              <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs font-medium">
-                {authError}
-              </div>
-            )}
-
             {mode === 'register' && (
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  Nome Completo
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                  Seu Nome
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Seu nome"
-                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
+                    placeholder="Ex: Carlos Silva"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 bg-slate-950 transition-colors"
                   />
+                  <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                 E-mail
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="exemplo@gmail.com"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
+                  placeholder="seu@email.com"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 bg-slate-950 transition-colors"
                 />
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                 Senha
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-950/80"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 bg-slate-950 transition-colors"
                 />
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
 
             <button
               type="submit"
               disabled={submitting || loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-orange-600/20 disabled:opacity-60"
+              className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs disabled:opacity-50 mt-1 cursor-pointer"
             >
               {submitting ? (
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Processando...</span>
+                </>
               ) : (
                 <>
-                  <span>{mode === 'login' ? 'Entrar no AutoCheck' : 'Criar minha conta'}</span>
+                  <span>{mode === 'login' ? 'Acessar Conta' : 'Criar Minha Conta'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
           </form>
-        </div>
 
-        <p className="text-center text-[11px] text-slate-500">
-          Dados sincronizados em tempo real via Firebase
-        </p>
+          {/* Clean footer note */}
+          <p className="text-[10px] text-center text-slate-400">
+            Acesso seguro com sincronização em nuvem e backup automático.
+          </p>
+        </div>
       </div>
     </div>
   );

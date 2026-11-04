@@ -2,9 +2,11 @@ import React, { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { VehicleProvider, useVehicles } from './context/VehicleContext';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
 import { BottomNav, TabType } from './components/BottomNav';
 import { MaintenanceAlertBanner } from './components/MaintenanceAlertBanner';
 import { AutoCheckLogo } from './components/AutoCheckLogo';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { Maintenance, Vehicle } from './types/vehicle';
 import { Loader2 } from 'lucide-react';
 
@@ -68,6 +70,7 @@ const AppContent: React.FC = () => {
     return (
       <Suspense fallback={<TabLoadingFallback />}>
         <LoginModal />
+        <PWAInstallPrompt />
       </Suspense>
     );
   }
@@ -88,55 +91,74 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col selection:bg-orange-500 selection:text-white">
+      {/* Desktop Sidebar (hidden on mobile, visible on md+) */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenNewVehicle={handleOpenNewVehicle}
+        onOpenVehicleModal={handleEditVehicle}
+        onOpenRefueling={() => setIsRefuelingOpen(true)}
+        onOpenMaintenance={() => setIsMaintenanceOpen(true)}
+        onOpenShareModal={() => setIsShareOpen(true)}
+      />
+
       {/* Top Header */}
       <Header
+        activeTab={activeTab}
         onOpenNewVehicle={handleOpenNewVehicle}
         onOpenShareModal={() => setIsShareOpen(true)}
         onOpenVehicleModal={handleEditVehicle}
+        onOpenRefueling={() => setIsRefuelingOpen(true)}
+        onOpenMaintenance={() => setIsMaintenanceOpen(true)}
       />
 
-      {/* Persistent Daily Maintenance Alert Banner */}
-      <MaintenanceAlertBanner onCompleteMaintenance={handleStartCompleteMaintenance} />
+      {/* Main View Area (offset on desktop by sidebar width: md:pl-64 lg:pl-72) */}
+      <div className="md:pl-64 lg:pl-72 flex-1 flex flex-col transition-all">
+        {/* Persistent Daily Maintenance Alert Banner */}
+        <div className="max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-3">
+          <MaintenanceAlertBanner onCompleteMaintenance={handleStartCompleteMaintenance} />
+        </div>
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-md sm:max-w-xl w-full mx-auto px-4 py-4">
-        {vehicleLoading && !activeVehicle ? (
-          <div className="py-20 text-center space-y-3">
-            <Loader2 className="w-6 h-6 animate-spin text-orange-600 mx-auto" />
-            <p className="text-xs text-slate-500 font-medium">Sincronizando veículos no Firebase...</p>
-          </div>
-        ) : (
-          <Suspense fallback={<TabLoadingFallback />}>
-            {activeTab === 'dashboard' && (
-              <DashboardTab
-                onOpenRefueling={() => setIsRefuelingOpen(true)}
-                onOpenMaintenance={() => setIsMaintenanceOpen(true)}
-                onOpenShare={() => setActiveTab('share')}
-                onCompleteMaintenance={handleStartCompleteMaintenance}
-                onNavigateToTab={(tab) => setActiveTab(tab)}
-                onOpenNewVehicle={handleOpenNewVehicle}
-              />
-            )}
+        {/* Main View Area */}
+        <main className="flex-1 max-w-md sm:max-w-xl md:max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-24 md:pb-12">
+          {vehicleLoading && !activeVehicle ? (
+            <div className="py-20 text-center space-y-3">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-600 mx-auto" />
+              <p className="text-xs text-slate-500 font-medium">Sincronizando veículos no Firebase...</p>
+            </div>
+          ) : (
+            <Suspense fallback={<TabLoadingFallback />}>
+              {activeTab === 'dashboard' && (
+                <DashboardTab
+                  onOpenRefueling={() => setIsRefuelingOpen(true)}
+                  onOpenMaintenance={() => setIsMaintenanceOpen(true)}
+                  onOpenShare={() => setActiveTab('share')}
+                  onCompleteMaintenance={handleStartCompleteMaintenance}
+                  onNavigateToTab={(tab) => setActiveTab(tab)}
+                  onOpenNewVehicle={handleOpenNewVehicle}
+                />
+              )}
 
-            {activeTab === 'fuel' && (
-              <FuelTab onOpenNewRefueling={() => setIsRefuelingOpen(true)} />
-            )}
+              {activeTab === 'fuel' && (
+                <FuelTab onOpenNewRefueling={() => setIsRefuelingOpen(true)} />
+              )}
 
-            {activeTab === 'maintenance' && (
-              <MaintenanceTab
-                onOpenNewMaintenance={() => setIsMaintenanceOpen(true)}
-                onCompleteMaintenance={handleStartCompleteMaintenance}
-              />
-            )}
+              {activeTab === 'maintenance' && (
+                <MaintenanceTab
+                  onOpenNewMaintenance={() => setIsMaintenanceOpen(true)}
+                  onCompleteMaintenance={handleStartCompleteMaintenance}
+                />
+              )}
 
-            {activeTab === 'history' && <HistoryTab />}
+              {activeTab === 'history' && <HistoryTab />}
 
-            {activeTab === 'share' && <FamilyTab onOpenNewVehicle={handleOpenNewVehicle} />}
-          </Suspense>
-        )}
-      </main>
+              {activeTab === 'share' && <FamilyTab onOpenNewVehicle={handleOpenNewVehicle} />}
+            </Suspense>
+          )}
+        </main>
+      </div>
 
-      {/* Mobile-first bottom navigation bar */}
+      {/* Mobile-first bottom navigation bar (hidden on md+) */}
       <BottomNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -180,6 +202,9 @@ const AppContent: React.FC = () => {
             vehicleToEdit={vehicleToEdit}
           />
         )}
+
+        {/* PWA Installation Banner (Android WebAPK + iOS instructions) */}
+        <PWAInstallPrompt />
       </Suspense>
     </div>
   );
