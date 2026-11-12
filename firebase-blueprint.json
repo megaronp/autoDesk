@@ -100,6 +100,25 @@
         "createdAt": { "type": "string", "description": "ISO timestamp" }
       },
       "required": ["code", "vehicleId", "ownerId"]
+    },
+    "MileageAdjustment": {
+      "title": "MileageAdjustment",
+      "description": "Log of odometer updates, corrections, and initial vehicle registration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of adjustment entry" },
+        "vehicleId": { "type": "string", "maxLength": 128, "description": "Vehicle ID" },
+        "type": { "type": "string", "enum": ["registration", "adjustment", "correction"], "description": "Type of mileage event" },
+        "previousMileage": { "type": "number", "description": "Odometer before adjustment" },
+        "newMileage": { "type": "number", "description": "New recorded odometer" },
+        "difference": { "type": "number", "description": "Difference in kilometers" },
+        "date": { "type": "string", "description": "Event date (YYYY-MM-DD)" },
+        "reason": { "type": "string", "maxLength": 200, "description": "Reason for adjustment" },
+        "createdByUid": { "type": "string", "maxLength": 128, "description": "UID of author" },
+        "createdByName": { "type": "string", "maxLength": 80, "description": "Name of author" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["vehicleId", "type", "newMileage", "date", "createdByUid"]
     }
   },
   "firestore": {
@@ -114,6 +133,10 @@
     "/vehicles/{vehicleId}/maintenances/{maintenanceId}": {
       "schema": { "$ref": "Maintenance" },
       "description": "Scheduled and completed maintenance events for a vehicle"
+    },
+    "/vehicles/{vehicleId}/mileageAdjustments/{adjustmentId}": {
+      "schema": { "$ref": "MileageAdjustment" },
+      "description": "Odometer adjustments and vehicle registration mileage history"
     },
     "/shareCodes/{code}": {
       "schema": { "$ref": "ShareCode" },

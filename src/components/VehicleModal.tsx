@@ -37,7 +37,8 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [plate, setPlate] = useState('');
   const [fuelType, setFuelType] = useState<FuelType>('Flex');
-  const [currentMileage, setCurrentMileage] = useState<number>(0);
+  const [currentMileage, setCurrentMileage] = useState<string>('0');
+  const [initialMileage, setInitialMileage] = useState<string>('0');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +50,8 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
       setYear(vehicleToEdit.year);
       setPlate(vehicleToEdit.plate);
       setFuelType(vehicleToEdit.fuelType);
-      setCurrentMileage(vehicleToEdit.currentMileage);
+      setCurrentMileage(String(vehicleToEdit.currentMileage ?? '0'));
+      setInitialMileage(String(vehicleToEdit.initialMileage ?? vehicleToEdit.currentMileage ?? '0'));
     } else {
       setName('');
       setBrand('Honda');
@@ -57,7 +59,8 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
       setYear(new Date().getFullYear());
       setPlate('');
       setFuelType('Flex');
-      setCurrentMileage(0);
+      setCurrentMileage('0');
+      setInitialMileage('0');
     }
   }, [vehicleToEdit, isOpen]);
 
@@ -83,18 +86,28 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
       return;
     }
 
+    const parsedCurrent = parseFloat(currentMileage.replace(',', '.'));
+    const parsedInitial = parseFloat(initialMileage.replace(',', '.'));
+    const numCurrent = isNaN(parsedCurrent) ? 0 : parsedCurrent;
+    const numInitial = isNaN(parsedInitial) ? numCurrent : parsedInitial;
+
     try {
       setSubmitting(true);
       if (vehicleToEdit) {
-        await updateVehicle(vehicleToEdit.id, {
-          name: name.trim(),
-          brand,
-          model: model.trim(),
-          year,
-          plate: plate.toUpperCase().trim(),
-          fuelType,
-          currentMileage,
-        });
+        await updateVehicle(
+          vehicleToEdit.id,
+          {
+            name: name.trim(),
+            brand,
+            model: model.trim(),
+            year,
+            plate: plate.toUpperCase().trim(),
+            fuelType,
+            currentMileage: numCurrent,
+            initialMileage: numInitial,
+          },
+          'Ajuste pelo cadastro do veículo'
+        );
       } else {
         await addVehicle({
           name: name.trim(),
@@ -103,7 +116,7 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
           year,
           plate: plate.toUpperCase().trim(),
           fuelType,
-          currentMileage,
+          currentMileage: numCurrent,
         });
       }
       onClose();
@@ -271,29 +284,54 @@ export const VehicleModal: React.FC<VehicleModalProps> = ({
             </div>
           </div>
 
-          {/* Current Mileage */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              Quilometragem Atual (km) *
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                required
-                disabled={!isOwner}
-                value={currentMileage || ''}
-                onChange={(e) => setCurrentMileage(Number(e.target.value))}
-                placeholder="Ex: 45000"
-                min={0}
-                className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-slate-50/50 disabled:opacity-75 disabled:bg-slate-100"
-              />
-              <Gauge className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {/* Mileage Inputs (Initial Base & Current) */}
+          <div className="space-y-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {vehicleToEdit && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Km Antiga / Inicial de Base (km)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      disabled={!isOwner}
+                      value={initialMileage}
+                      onChange={(e) => setInitialMileage(e.target.value)}
+                      placeholder="Ex: 22675.1"
+                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-white disabled:opacity-75 disabled:bg-slate-100"
+                    />
+                    <Gauge className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Base para o cálculo do 1º abastecimento.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  {vehicleToEdit ? 'Quilometragem Atual (km) *' : 'Quilometragem Inicial do Odômetro (km) *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    required
+                    disabled={!isOwner}
+                    value={currentMileage}
+                    onChange={(e) => setCurrentMileage(e.target.value)}
+                    placeholder="Ex: 23144"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-orange-500 bg-white disabled:opacity-75 disabled:bg-slate-100"
+                  />
+                  <Gauge className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {vehicleToEdit ? 'Odômetro atual registrado.' : 'Quilometragem no momento do cadastro.'}
+                </p>
+              </div>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">
-              {isOwner
-                ? 'Esta quilometragem serve de base para as previsões de revisão.'
-                : 'A quilometragem pode ser atualizada no painel inicial ao abastecer.'}
-            </p>
           </div>
 
           {/* Fuel Type */}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Fuel, Gauge, DollarSign, Calendar, MapPin, Sparkles } from 'lucide-react';
+import { X, Fuel, Gauge, DollarSign, Calendar, MapPin, Sparkles, TrendingUp, ArrowUpRight } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
-import { getLocalDateString } from '../utils/calculations';
+import { getLocalDateString, formatKm, formatKmL } from '../utils/calculations';
 import { formatFriendlyError } from '../lib/firebase';
 
 interface RefuelingModalProps {
@@ -15,7 +15,9 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
   const { activeVehicle, addRefueling, refuelings } = useVehicles();
 
   const [date, setDate] = useState(() => getLocalDateString());
-  const [mileage, setMileage] = useState<number>(0);
+  const [mileage, setMileage] = useState<string>('');
+  const [previousMileage, setPreviousMileage] = useState<string>('');
+  const [showCustomPrev, setShowCustomPrev] = useState(false);
   const [liters, setLiters] = useState<string>('');
   const [pricePerLiter, setPricePerLiter] = useState<string>('');
   const [totalCost, setTotalCost] = useState<string>('');
@@ -32,7 +34,12 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
   useEffect(() => {
     if (isOpen && !prevOpenRef.current && activeVehicle) {
       setDate(getLocalDateString());
-      setMileage(activeVehicle.currentMileage);
+      setMileage(activeVehicle.currentMileage ? String(activeVehicle.currentMileage) : '');
+      const sortedPrev = [...refuelings].sort((a, b) => (Number(a.mileage) || 0) - (Number(b.mileage) || 0));
+      const lastR = sortedPrev.length > 0 ? sortedPrev[sortedPrev.length - 1] : null;
+      const defaultPrev = lastR ? lastR.mileage : (activeVehicle.initialMileage && activeVehicle.initialMileage > 0 ? activeVehicle.initialMileage : '');
+      setPreviousMileage(defaultPrev ? String(defaultPrev) : '');
+      setShowCustomPrev(false);
       setLiters('');
       setPricePerLiter('');
       setTotalCost('');
@@ -43,7 +50,7 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
       setError(null);
     }
     prevOpenRef.current = isOpen;
-  }, [isOpen, activeVehicle]);
+  }, [isOpen, activeVehicle, refuelings]);
 
   if (!isOpen || !activeVehicle) return null;
 
@@ -74,50 +81,83 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
     }
   };
 
-  // Accurately compute preview km/L including any intermediate partial refuelings
-  const lastFullRefueling = [...refuelings].reverse().find((r) => r.isFullTank);
+  // Accurately compute km difference and preview km/L including any intermediate partial refuelings
+  const sortedPrevious = [...refuelings].sort((a, b) => a.mileage - b.mileage);
+  const lastRefueling = sortedPrevious.length > 0 ? sortedPrevious[sortedPrevious.length - 1] : null;
+  const lastFullRefueling = [...sortedPrevious].reverse().find((r) => r.isFullTank);
   const numLiters = parseFloat(liters.replace(',', '.'));
+  const numTotal = parseFloat(totalCost.replace(',', '.'));
+  const parsedMileage = parseFloat(mileage.replace(',', '.'));
+  const parsedPrev = parseFloat(previousMileage.replace(',', '.'));
+
+  // Effective previous km base
+  const defaultPrevBase = lastRefueling?.mileage ?? (activeVehicle.initialMileage && activeVehicle.initialMileage > 0 ? activeVehicle.initialMileage : 0);
+  const effectivePrev = !isNaN(parsedPrev) && parsedPrev > 0 ? parsedPrev : defaultPrevBase;
+  const previewKmDiff = !isNaN(parsedMileage) && effectivePrev > 0 && parsedMileage > effectivePrev
+    ? Number((parsedMileage - effectivePrev).toFixed(1))
+    : null;
+
   let previewKmL: number | null = null;
-  if (lastFullRefueling && isFullTank && !isNaN(numLiters) && numLiters > 0 && mileage > lastFullRefueling.mileage) {
+  let previewCycleKm: number | null = null;
+  let isCycleAccurate = false;
+
+  if (lastFullRefueling && isFullTank && !isNaN(numLiters) && numLiters > 0 && !isNaN(parsedMileage) && parsedMileage > lastFullRefueling.mileage && !showCustomPrev) {
     const intermediateLiters = refuelings
-      .filter((r) => !r.isFullTank && r.mileage > lastFullRefueling.mileage && r.mileage < mileage)
+      .filter((r) => !r.isFullTank && r.mileage > lastFullRefueling.mileage && r.mileage < parsedMileage)
       .reduce((sum, r) => sum + r.liters, 0);
     const totalLiters = intermediateLiters + numLiters;
-    previewKmL = Number(((mileage - lastFullRefueling.mileage) / totalLiters).toFixed(2));
+    previewCycleKm = Number((parsedMileage - lastFullRefueling.mileage).toFixed(1));
+    previewKmL = Number((previewCycleKm / totalLiters).toFixed(3));
+    isCycleAccurate = true;
+  } else if (previewKmDiff && !isNaN(numLiters) && numLiters > 0) {
+    previewKmL = Number((previewKmDiff / numLiters).toFixed(3));
+    isCycleAccurate = false;
   }
+
+  const effectiveKm = isCycleAccurate && previewCycleKm ? previewCycleKm : previewKmDiff;
+  const previewCostPerKm = effectiveKm && effectiveKm > 0 && !isNaN(numTotal) && numTotal > 0
+    ? Number((numTotal / effectiveKm).toFixed(2))
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const parsedLiters = parseFloat(liters.replace(',', '.'));
+    const parsedL = parseFloat(liters.replace(',', '.'));
     const parsedPrice = parseFloat(pricePerLiter.replace(',', '.'));
-    const parsedTotal = parseFloat(totalCost.replace(',', '.'));
+    const parsedT = parseFloat(totalCost.replace(',', '.'));
+    const parsedM = parseFloat(mileage.replace(',', '.'));
+    const parsedP = parseFloat(previousMileage.replace(',', '.'));
 
-    if (isNaN(mileage) || mileage <= 0) {
+    if (isNaN(parsedM) || parsedM <= 0) {
       setError('Por favor informe a quilometragem atual do veículo.');
       return;
     }
 
-    // Mileage validation: cannot be less than previous records
-    const previousMileages = refuelings.map((r) => r.mileage);
-    if (previousMileages.length > 0) {
-      const highestPrevious = Math.max(...previousMileages);
-      if (mileage < highestPrevious) {
-        setError(`A quilometragem informada (${mileage.toLocaleString('pt-BR')} km) não pode ser menor que o último registro (${highestPrevious.toLocaleString('pt-BR')} km).`);
-        return;
-      }
-    } else if (activeVehicle.initialMileage && mileage < activeVehicle.initialMileage) {
-      setError(`A quilometragem informada (${mileage.toLocaleString('pt-BR')} km) não pode ser menor que a inicial do veículo (${activeVehicle.initialMileage.toLocaleString('pt-BR')} km).`);
+    if (!isNaN(parsedP) && parsedP > 0 && parsedM <= parsedP) {
+      setError(`A quilometragem atual (${formatKm(parsedM)}) deve ser maior que a quilometragem anterior (${formatKm(parsedP)}).`);
       return;
     }
 
-    if (isNaN(parsedLiters) || parsedLiters <= 0) {
+    // Mileage validation: cannot be less than previous records unless custom previous is provided
+    const previousMileages = refuelings.map((r) => r.mileage);
+    if (previousMileages.length > 0 && (isNaN(parsedP) || parsedP <= 0)) {
+      const highestPrevious = Math.max(...previousMileages);
+      if (parsedM < highestPrevious) {
+        setError(`A quilometragem informada (${formatKm(parsedM)}) não pode ser menor que o último registro (${formatKm(highestPrevious)}).`);
+        return;
+      }
+    } else if (activeVehicle.initialMileage && parsedM < activeVehicle.initialMileage && (isNaN(parsedP) || parsedP <= 0)) {
+      setError(`A quilometragem informada (${formatKm(parsedM)}) não pode ser menor que a inicial do veículo (${formatKm(activeVehicle.initialMileage)}).`);
+      return;
+    }
+
+    if (isNaN(parsedL) || parsedL <= 0) {
       setError('Informe a quantidade de litros abastecidos.');
       return;
     }
 
-    if (isNaN(parsedTotal) || parsedTotal <= 0) {
+    if (isNaN(parsedT) || parsedT <= 0) {
       setError('Informe o valor total do abastecimento.');
       return;
     }
@@ -126,10 +166,11 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
       setSubmitting(true);
       await addRefueling({
         date,
-        mileage,
-        liters: parsedLiters,
-        pricePerLiter: isNaN(parsedPrice) ? Number((parsedTotal / parsedLiters).toFixed(2)) : parsedPrice,
-        totalCost: parsedTotal,
+        mileage: parsedM,
+        previousMileage: !isNaN(parsedP) && parsedP > 0 ? parsedP : undefined,
+        liters: parsedL,
+        pricePerLiter: isNaN(parsedPrice) ? Number((parsedT / parsedL).toFixed(2)) : parsedPrice,
+        totalCost: parsedT,
         fuelType,
         isFullTank,
         gasStation: gasStation.trim(),
@@ -181,16 +222,25 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
                 Odômetro Atual (KM)
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 required
-                value={mileage || ''}
-                onChange={(e) => setMileage(Number(e.target.value))}
-                placeholder="Ex: 48950"
+                value={mileage}
+                onChange={(e) => setMileage(e.target.value)}
+                placeholder="Ex: 23144"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-50/50"
               />
-              <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Atual: {activeVehicle.currentMileage.toLocaleString('pt-BR')} km
-              </span>
+              <div className="flex items-center justify-between text-[10px] mt-1">
+                <span className="text-slate-500 truncate">
+                  Ant.: {effectivePrev > 0 ? formatKm(effectivePrev) : '0 km'}
+                </span>
+                {previewKmDiff !== null && previewKmDiff > 0 && (
+                  <span className="text-emerald-700 font-bold flex items-center gap-0.5 shrink-0">
+                    <ArrowUpRight className="w-3 h-3" />
+                    +{formatKm(previewKmDiff)}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div>
@@ -206,6 +256,39 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 bg-slate-50/50"
               />
             </div>
+          </div>
+
+          {/* Custom Previous Mileage Option */}
+          <div className="bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-700">Km anterior / de referência:</span>
+              <button
+                type="button"
+                onClick={() => setShowCustomPrev(!showCustomPrev)}
+                className="text-[10px] font-semibold text-orange-600 hover:text-orange-700 hover:underline"
+              >
+                {showCustomPrev ? 'Ocultar ajuste' : 'Ajustar Km antiga'}
+              </button>
+            </div>
+            {showCustomPrev ? (
+              <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={previousMileage}
+                  onChange={(e) => setPreviousMileage(e.target.value)}
+                  placeholder={`Ex: ${defaultPrevBase > 0 ? String(defaultPrevBase) : '22675.1'}`}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:border-orange-500 bg-white"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Defina a quilometragem antiga exata para calcular os km percorridos (+{previewKmDiff !== null ? formatKm(previewKmDiff) : '--'}) e a média de consumo.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                Calculando a partir de: <strong className="font-mono text-slate-700">{effectivePrev > 0 ? formatKm(effectivePrev) : 'nenhuma anterior (0 km)'}</strong>
+              </p>
+            )}
           </div>
 
           {/* Liters & Price per liter */}
@@ -305,14 +388,56 @@ export const RefuelingModal: React.FC<RefuelingModalProps> = ({ isOpen, onClose 
             </button>
           </div>
 
-          {/* Preview KmL if available */}
-          {previewKmL && (
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-emerald-800">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-xs font-semibold">Estimativa:</span>
+          {/* Preview Metrics: Diferença de Km e Média de Consumo */}
+          {(previewKmDiff !== null || previewKmL !== null) && (
+            <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border border-emerald-200/90 space-y-2 text-slate-800 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Cálculo em Tempo Real
+                </span>
+                {isFullTank ? (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Tanque Cheio
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                    Abastecimento Parcial
+                  </span>
+                )}
               </div>
-              <span className="text-xs font-bold font-mono">{previewKmL} km/L</span>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-emerald-200/60">
+                {/* Diferença de Km */}
+                <div className="bg-white/90 p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-medium block">Diferença de KM</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-emerald-800 flex items-center gap-0.5">
+                    {previewKmDiff !== null ? `+${formatKm(previewKmDiff)}` : '--'}
+                  </span>
+                </div>
+
+                {/* Média de Consumo */}
+                <div className="bg-white/90 p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-medium block">Média de Consumo</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-emerald-800">
+                    {previewKmL !== null ? formatKmL(previewKmL) : '--'}
+                  </span>
+                </div>
+
+                {/* Custo por Km */}
+                <div className="bg-white/90 p-2 rounded-lg border border-emerald-100 shadow-2xs col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-slate-500 font-medium block">Custo por Km</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-emerald-800">
+                    {previewCostPerKm ? `R$ ${previewCostPerKm.toFixed(2)}/km` : '--'}
+                  </span>
+                </div>
+              </div>
+
+              {isCycleAccurate && previewCycleKm && previewCycleKm !== previewKmDiff && (
+                <p className="text-[10px] text-emerald-700/90 pt-0.5">
+                  Ciclo completo tanque a tanque: <strong>+{formatKm(previewCycleKm)}</strong> (inclui parciais intermediários).
+                </p>
+              )}
             </div>
           )}
 

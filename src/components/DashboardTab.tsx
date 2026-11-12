@@ -22,6 +22,8 @@ import {
   formatDate,
   calculateWeightedConsumption,
   getLocalMonthString,
+  formatKm,
+  formatKmL,
 } from '../utils/calculations';
 import { Maintenance } from '../types/vehicle';
 
@@ -76,7 +78,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   }
 
   // Calculate weighted stats (Total km / Total liters across full-to-full intervals)
-  const { averageKmL, averageCostPerKm, validIntervalCount } = calculateWeightedConsumption(refuelings);
+  const { averageKmL, averageCostPerKm, validIntervalCount } = calculateWeightedConsumption(refuelings, activeVehicle.initialMileage);
 
   // Monthly fuel + maintenance spend using local timezone month
   const currentMonth = getLocalMonthString();
@@ -97,7 +99,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
   const handleSaveMileage = async () => {
     if (newMileage > 0) {
-      await updateVehicle(activeVehicle.id, { currentMileage: newMileage });
+      await updateVehicle(activeVehicle.id, { currentMileage: newMileage }, 'Ajuste de odômetro pelo Dashboard');
     }
     setIsEditingMileage(false);
   };
@@ -456,24 +458,28 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                           </span>
                           {r.calculatedKmL && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {r.calculatedKmL} km/L
+                              {formatKmL(r.calculatedKmL)} km/L
                             </span>
                           )}
                         </div>
                         <p className="text-[10px] text-slate-500">
-                          {formatDate(r.date)} • {r.mileage.toLocaleString('pt-BR')} km
+                          {formatDate(r.date)} • {formatKm(r.mileage)} km
                           {r.gasStation && ` • ${r.gasStation}`}
                         </p>
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-bold font-mono text-slate-900">
+                      <span className="text-xs font-bold font-mono text-slate-900 block">
                         {formatCurrency(r.totalCost)}
                       </span>
-                      {r.kmTraveled && (
+                      {(r.kmDifference || r.kmTraveled) ? (
+                        <span className="block text-[10px] text-sky-700 font-bold font-mono">
+                          +{formatKm(r.kmDifference || r.kmTraveled)} km
+                        </span>
+                      ) : (
                         <span className="block text-[10px] text-slate-400">
-                          +{r.kmTraveled} km
+                          {r.liters.toFixed(1)}L
                         </span>
                       )}
                     </div>

@@ -8,18 +8,21 @@ import {
   Calendar,
   Gauge,
   Store,
+  Compass,
+  ArrowRight,
 } from 'lucide-react';
 import { useVehicles } from '../context/VehicleContext';
-import { formatCurrency, formatDate } from '../utils/calculations';
-import { Refueling, Maintenance } from '../types/vehicle';
+import { formatCurrency, formatDate, formatKm, formatKmL } from '../utils/calculations';
+import { Refueling, Maintenance, MileageAdjustment } from '../types/vehicle';
 
 type UnifiedHistoryItem =
   | { type: 'refueling'; data: Refueling; timestamp: number; date: string }
-  | { type: 'maintenance'; data: Maintenance; timestamp: number; date: string };
+  | { type: 'maintenance'; data: Maintenance; timestamp: number; date: string }
+  | { type: 'odometer'; data: MileageAdjustment; timestamp: number; date: string };
 
 export const HistoryTab: React.FC = () => {
-  const { activeVehicle, refuelings, maintenances } = useVehicles();
-  const [filterType, setFilterType] = useState<'all' | 'fuel' | 'maintenance'>('all');
+  const { activeVehicle, refuelings, maintenances, mileageAdjustments } = useVehicles();
+  const [filterType, setFilterType] = useState<'all' | 'fuel' | 'maintenance' | 'odometer'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   if (!activeVehicle) return null;
@@ -48,8 +51,18 @@ export const HistoryTab: React.FC = () => {
         });
       });
 
+    (mileageAdjustments || []).forEach((adj) => {
+      const d = adj.date || adj.createdAt.slice(0, 10);
+      list.push({
+        type: 'odometer',
+        data: adj,
+        timestamp: new Date(d).getTime(),
+        date: d,
+      });
+    });
+
     return list.sort((a, b) => b.timestamp - a.timestamp);
-  }, [refuelings, maintenances]);
+  }, [refuelings, maintenances, mileageAdjustments]);
 
   const totalFuelCost = refuelings.reduce((sum, r) => sum + r.totalCost, 0);
   const totalMaintCost = maintenances
@@ -61,6 +74,7 @@ export const HistoryTab: React.FC = () => {
     return unifiedHistory.filter((item) => {
       if (filterType === 'fuel' && item.type !== 'refueling') return false;
       if (filterType === 'maintenance' && item.type !== 'maintenance') return false;
+      if (filterType === 'odometer' && item.type !== 'odometer') return false;
 
       if (!searchTerm.trim()) return true;
 
@@ -71,12 +85,18 @@ export const HistoryTab: React.FC = () => {
           (item.data.gasStation || '').toLowerCase().includes(term) ||
           (item.data.notes || '').toLowerCase().includes(term)
         );
-      } else {
+      } else if (item.type === 'maintenance') {
         return (
           item.data.title.toLowerCase().includes(term) ||
           (item.data.workDone || '').toLowerCase().includes(term) ||
           (item.data.workshop || '').toLowerCase().includes(term) ||
           item.data.category.toLowerCase().includes(term)
+        );
+      } else {
+        return (
+          (item.data.reason || '').toLowerCase().includes(term) ||
+          item.data.type.toLowerCase().includes(term) ||
+          String(item.data.newMileage).includes(term)
         );
       }
     });
@@ -145,7 +165,7 @@ export const HistoryTab: React.FC = () => {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 text-xs font-semibold sm:w-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-xl bg-slate-100 text-xs font-semibold sm:w-auto">
           <button
             onClick={() => setFilterType('all')}
             className={`py-1.5 px-3 text-center rounded-lg transition-all ${
@@ -176,6 +196,16 @@ export const HistoryTab: React.FC = () => {
           >
             Serviços ({maintenances.filter((m) => m.status === 'completed').length})
           </button>
+          <button
+            onClick={() => setFilterType('odometer')}
+            className={`py-1.5 px-3 text-center rounded-lg transition-all ${
+              filterType === 'odometer'
+                ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Odômetro ({(mileageAdjustments || []).length})
+          </button>
         </div>
       </div>
 
@@ -186,7 +216,7 @@ export const HistoryTab: React.FC = () => {
             <HistoryIcon className="w-8 h-8 text-slate-400 mx-auto" />
             <h4 className="text-sm font-bold text-slate-800">Nenhum evento registrado</h4>
             <p className="text-xs text-slate-500">
-              Todos os abastecimentos e manutenções concluídas aparecem organizados aqui.
+              Todos os abastecimentos, serviços e ajustes de odômetro aparecem organizados aqui.
             </p>
           </div>
         ) : (
@@ -204,16 +234,21 @@ export const HistoryTab: React.FC = () => {
                         <Fuel className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-bold text-slate-900">Abastecimento</span>
+                          {(r.kmDifference || r.kmTraveled) && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 border border-sky-200">
+                              +{formatKm(r.kmDifference || r.kmTraveled)} km
+                            </span>
+                          )}
                           {r.calculatedKmL && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              {r.calculatedKmL} km/L
+                              {formatKmL(r.calculatedKmL)} km/L
                             </span>
                           )}
                         </div>
                         <p className="text-[10px] text-slate-500">
-                          {formatDate(r.date)} • {r.mileage.toLocaleString('pt-BR')} km
+                          {formatDate(r.date)} • {formatKm(r.mileage)} km
                         </p>
                       </div>
                     </div>
@@ -238,7 +273,7 @@ export const HistoryTab: React.FC = () => {
                   )}
                 </div>
               );
-            } else {
+            } else if (item.type === 'maintenance') {
               const m = item.data;
               return (
                 <div
@@ -284,6 +319,75 @@ export const HistoryTab: React.FC = () => {
                         <Store className="w-3 h-3 text-slate-400" />
                         Oficina: <span className="text-slate-700 font-medium">{m.workshop}</span>
                       </p>
+                    )}
+                  </div>
+                </div>
+              );
+            } else {
+              const a = item.data;
+              const isReg = a.type === 'registration';
+              return (
+                <div
+                  key={`adj_${a.id}_${idx}`}
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
+                        <Gauge className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            {isReg ? 'Cadastro do Veículo' : 'Ajuste de Odômetro'}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
+                              isReg
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            }`}
+                          >
+                            {isReg ? 'Km Inicial' : 'Odômetro Atual'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          {formatDate(a.date)} • Odômetro: <strong className="font-mono text-slate-700">{formatKm(a.newMileage)} km</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      {typeof a.difference === 'number' && a.difference !== 0 ? (
+                        <span
+                          className={`text-xs font-bold font-mono block ${
+                            a.difference > 0 ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          {a.difference > 0 ? `+${formatKm(a.difference)} km` : `${formatKm(a.difference)} km`}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold font-mono text-slate-700 block">
+                          {formatKm(a.newMileage)} km
+                        </span>
+                      )}
+                      <span className="block text-[10px] text-slate-400">
+                        {isReg ? 'Registro Base' : 'Ajuste Real'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/70 text-xs flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-slate-700 text-[11px]">
+                      {typeof a.previousMileage === 'number' && a.previousMileage > 0 && (
+                        <span className="font-mono text-slate-500">
+                          de {formatKm(a.previousMileage)} km para {formatKm(a.newMileage)} km •{' '}
+                        </span>
+                      )}
+                      <strong>{a.reason || 'Atualização de odômetro'}</strong>
+                    </span>
+                    {a.createdByName && (
+                      <span className="text-[10px] text-indigo-700 font-medium">Por {a.createdByName}</span>
                     )}
                   </div>
                 </div>

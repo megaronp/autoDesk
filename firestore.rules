@@ -100,7 +100,7 @@ service cloud.firestore {
           request.resource.data.ownerId == resource.data.ownerId &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'name', 'brand', 'model', 'year', 'plate', 'fuelType', 'color',
-            'currentMileage', 'sharedWithEmails', 'shareCode', 'updatedAt'
+            'currentMileage', 'initialMileage', 'sharedWithEmails', 'shareCode', 'updatedAt'
           ])
         ) ||
         // Case 2: Shared member updating mileage
@@ -207,6 +207,21 @@ service cloud.firestore {
             isVehicleOwnerById(vehicleId) ||
             (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
           );
+      }
+
+      // Mileage adjustments / odometer audit history subcollection
+      match /mileageAdjustments/{adjustmentId} {
+        allow get, list: if isSignedIn() && canAccessVehicle(vehicleId);
+        allow create: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          request.resource.data.createdByUid == request.auth.uid;
+        allow update: if isSignedIn() &&
+          canAccessVehicle(vehicleId) &&
+          (
+            isVehicleOwnerById(vehicleId) ||
+            (('createdByUid' in resource.data) && resource.data.createdByUid == request.auth.uid)
+          );
+        allow delete: if isSignedIn() && isVehicleOwnerById(vehicleId);
       }
     }
   }

@@ -31,6 +31,8 @@ export interface Refueling {
   isFullTank: boolean;
   calculatedKmL?: number;
   kmTraveled?: number;
+  kmDifference?: number;
+  previousMileage?: number;
   costPerKm?: number;
   gasStation?: string;
   notes?: string;
@@ -84,3 +86,20 @@ export interface UserProfile {
   notificationsEnabled?: boolean;
   lastActiveVehicleId?: string;
 }
+
+export type MileageAdjustmentType = 'registration' | 'adjustment' | 'correction';
+
+export interface MileageAdjustment {
+  id: string;
+  vehicleId: string;
+  type: MileageAdjustmentType;
+  previousMileage?: number;
+  newMileage: number;
+  difference?: number;
+  date: string;
+  reason?: string;
+  createdByUid: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
